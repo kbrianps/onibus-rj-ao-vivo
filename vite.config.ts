@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const BASE = process.env.PUBLIC_BASE ?? '/tools/onibus-rj-ao-vivo/';
+
 export default defineConfig({
+  base: BASE,
   server: {
     proxy: {
       '/api': {
@@ -27,8 +30,9 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        id: BASE,
+        start_url: BASE,
+        scope: BASE,
         lang: 'pt-BR',
         icons: [
           {
@@ -49,11 +53,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*/i,
+            urlPattern: /^https:\/\/[abcd]\.basemaps\.cartocdn\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'osm-tiles',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheName: 'carto-tiles',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
           {

@@ -1,7 +1,7 @@
 import type { Bus, Bounds } from './types';
 import { bboxParam } from './geo';
 
-const BASE = '/api';
+const BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`;
 
 export interface FetchOpts {
   line?: string;

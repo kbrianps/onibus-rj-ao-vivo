@@ -1,7 +1,21 @@
-name = "onibus-rj-ao-vivo-proxy"
+name = "onibus-rj-ao-vivo"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
+account_id = "864c4fd22125f77c95e383c82331b7a4"
+
+[assets]
+directory = "../dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[routes]]
+pattern = "kbrianps.com/tools/onibus-rj-ao-vivo"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
+
+[[routes]]
+pattern = "kbrianps.com/tools/onibus-rj-ao-vivo/*"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
 
 [dev]
 port = 8787

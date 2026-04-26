@@ -104,16 +104,34 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+interface Env {
+  ASSETS: { fetch(req: Request): Promise<Response> };
+}
+
+const PATH_PREFIX = '/tools/onibus-rj-ao-vivo';
+const API_PREFIX = '/api';
+
 export default {
-  async fetch(request: Request, _env: unknown, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
     const url = new URL(request.url);
-    if (url.pathname === '/' || url.pathname === '/health') {
+    let pathname = url.pathname;
+    if (pathname.startsWith(PATH_PREFIX)) {
+      pathname = pathname.slice(PATH_PREFIX.length) || '/';
+    }
+    if (pathname.startsWith(API_PREFIX)) {
+      pathname = pathname.slice(API_PREFIX.length) || '/';
+    } else if (env.ASSETS) {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = pathname;
+      return env.ASSETS.fetch(new Request(assetUrl, request));
+    }
+    if (pathname === '/' || pathname === '/health') {
       return jsonResponse({ ok: true, service: 'onibus-rj-ao-vivo-proxy' });
     }
-    if (url.pathname === '/route') {
+    if (pathname === '/route') {
       const line = url.searchParams.get('line')?.trim().toUpperCase();
       if (!line) return jsonResponse({ error: 'line required' }, 400);
       const shapes = ROUTES[line];
@@ -127,7 +145,7 @@ export default {
       });
     }
 
-    if (url.pathname === '/lines') {
+    if (pathname === '/lines') {
       let snapshot: Bus[];
       try {
         snapshot = await loadSnapshot(ctx);
@@ -149,7 +167,7 @@ export default {
       return jsonResponse(lines);
     }
 
-    if (url.pathname === '/reverse') {
+    if (pathname === '/reverse') {
       const lat = parseFloat(url.searchParams.get('lat') || '');
       const lng = parseFloat(url.searchParams.get('lng') || '');
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -198,7 +216,7 @@ export default {
       return res;
     }
 
-    if (url.pathname === '/geocode') {
+    if (pathname === '/geocode') {
       const q = url.searchParams.get('q')?.trim();
       if (!q || q.length < 2) return jsonResponse({ error: 'q required' }, 400);
       const cacheKey = new Request(`https://onibus-rj-cache/geocode?q=${encodeURIComponent(q.toLowerCase())}`);
@@ -239,7 +257,7 @@ export default {
       return res;
     }
 
-    if (url.pathname !== '/sppo') {
+    if (pathname !== '/sppo') {
       return jsonResponse({ error: 'not found' }, 404);
     }
 

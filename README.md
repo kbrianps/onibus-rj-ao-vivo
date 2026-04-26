@@ -12,6 +12,13 @@ Acompanhe os ônibus do município do Rio de Janeiro em tempo real, no mapa.
 
 Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da SPPO (Secretaria Municipal de Transportes do Rio de Janeiro). O usuário escolhe a linha e vê os veículos se movendo pelo mapa, com a rota oficial sobreposta.
 
+### Motivação
+
+- **Quem não tem espaço no celular**: o app abre direto no navegador (~50 KB) e pode ser instalado como PWA depois, sem precisar baixar 50–100 MB de Play Store.
+- **Quem precisa de algo rápido**: autocomplete de linha + cache do PWA fazem o app abrir em segundos e responder instantâneo nas visitas seguintes.
+- **Quem tem dificuldade com aplicativos**: interface enxuta — uma busca de endereço no topo, uma busca de linha embaixo, e o mapa. Sem menus, sem login, sem pop-up.
+- **Quem se irrita com anúncios**: zero anúncios. Concorrentes inserem ads em pop-up, banners e até áudio em momentos inoportunos (esperando o ônibus, com pouco sinal). Aqui o foco é o ônibus.
+
 ### Stack
 
 - **Frontend**: TypeScript + Vite + Leaflet (vanilla, sem framework). Bundle ~50 KB gzip.
@@ -150,7 +157,7 @@ A API (`/api/*`) é destinada apenas ao próprio app. Camadas implementadas:
    - Dev (env `dev`): adiciona `localhost:5173` e `127.0.0.1:5173`
    - `/health` é o único endpoint exposto sem checagem (pra monitoramento)
 2. **CORS restritivo** (Worker): `Access-Control-Allow-Origin` só ecoa o origin da request quando ele está na lista permitida. Browsers bloqueiam outros sites de chamar nossa API.
-3. **Rate limit** (Workers Rate Limiting binding): 120 req/min/IP. Cobre uso normal (4 req/min × 30 abas), mata abuso/scrapping.
+3. **Rate limit** (Workers Rate Limiting binding): 30 req/min/IP. Cobre uso normal (1 usuário, 1-2 abas, ~4-8 req/min) com folga de 3-7x. Mata abuso/scrapping.
 
 Camadas adicionais (configuráveis no Cloudflare Dashboard, sem código):
 
@@ -193,6 +200,13 @@ GPLv3 — ver [LICENSE](LICENSE). Resumindo: você pode usar, modificar e redist
 ## English
 
 Mobile-first PWA that shows real-time positions of buses operating in the city of Rio de Janeiro, Brazil, using the official SPPO (Municipal Transportation Department) API. Pick a line, watch the buses move on the map, with the official GTFS route overlaid.
+
+### Why
+
+- **No room on your phone**: the app opens straight in the browser (~50 KB) and can be installed as a PWA later. No need to download a 50–100 MB native app from the Play Store.
+- **You need it fast**: line autocomplete + PWA caching make the app load in seconds and feel instant on subsequent visits.
+- **You're not tech-savvy**: lean UI — one address search on top, one line search at the bottom, the map in between. No menus, no login, no pop-ups.
+- **You hate ads**: zero ads. Competing apps push ads in pop-ups, banners and even audio at the worst times (while waiting for the bus, on a flaky signal). Here the focus is the bus.
 
 ### Stack
 
@@ -327,7 +341,7 @@ The API (`/api/*`) is meant for the app itself. Layers in place:
    - Dev env: adds `localhost:5173` / `127.0.0.1:5173`
    - `/health` is the only endpoint exposed without checks (for monitoring)
 2. **Restrictive CORS** (Worker): `Access-Control-Allow-Origin` only echoes the request origin if it's in the allowed list. Browsers block other sites from calling the API.
-3. **Rate limit** (Workers Rate Limiting binding): 120 req/min/IP. Covers normal use (4 req/min × 30 tabs), kills scraping/abuse.
+3. **Rate limit** (Workers Rate Limiting binding): 30 req/min/IP. Covers normal use (1 user, 1-2 tabs, ~4-8 req/min) with 3-7x headroom. Kills scraping/abuse.
 
 Additional layers (Cloudflare Dashboard, no code):
 

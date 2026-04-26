@@ -1,0 +1,13 @@
+{
+  "name": "onibus-rj-ao-vivo-proxy",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251001.0",
+    "wrangler": "^4.0.0"
+  }
+}

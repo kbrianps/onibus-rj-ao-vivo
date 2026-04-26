@@ -1,0 +1,7 @@
+name = "onibus-rj-ao-vivo-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8787

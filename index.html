@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Ônibus RJ - Ao Vivo</title>
+    <style>
+      html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #0f172a; }
+      #map { position: fixed; inset: 0; z-index: 0; background: #e2e8f0; }
+      body:not(.ready) #topbar,
+      body:not(.ready) #sheet,
+      body:not(.ready) #recenter,
+      body:not(.ready) .leaflet-control-container { visibility: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="map" aria-label="Mapa do Rio de Janeiro com ônibus"></div>
+
+    <header id="topbar">
+      <form id="search-form" autocomplete="off" role="search">
+        <input id="search-input" type="search" placeholder="Buscar endereço ou bairro" aria-label="Buscar local" />
+        <button id="search-status" type="button" aria-label="Buscar" data-state="idle">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+        <ul id="search-results" hidden role="listbox"></ul>
+      </form>
+    </header>
+
+    <button id="recenter" type="button" title="Ir para meu local" aria-label="Ir para meu local">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+
+    <section id="sheet" aria-label="Selecionar linha">
+      <ul id="line-suggestions" hidden role="listbox"></ul>
+      <form id="line-form" autocomplete="off">
+        <input id="line-input" type="text" inputmode="latin" placeholder="Linha (ex: 104)" maxlength="12" role="combobox" aria-autocomplete="list" aria-controls="line-suggestions" aria-expanded="false" />
+        <button type="submit" aria-label="Buscar linha" data-state="idle">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+      </form>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

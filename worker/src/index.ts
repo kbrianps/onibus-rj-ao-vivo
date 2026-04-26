@@ -436,7 +436,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       const street = a.road || a.pedestrian || a.cycleway || a.footway || a.path || '';
       const number = a.house_number ? `, ${a.house_number}` : '';
       const area = a.suburb || a.neighbourhood || a.city_district || a.quarter || '';
-      const short = street ? `${street}${number}${area ? ` — ${area}` : ''}` : area || raw.display_name.split(',').slice(0, 2).join(',').trim();
+      const short = street ? `${street}${number}${area ? `, ${area}` : ''}` : area || raw.display_name.split(',').slice(0, 2).join(',').trim();
       const result = {
         lat: parseFloat(raw.lat),
         lng: parseFloat(raw.lon),

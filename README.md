@@ -4,7 +4,8 @@
 [![Deploy](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/deploy.yml/badge.svg)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/deploy.yml)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-17%20passing-success)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
-[![Bundle](https://img.shields.io/badge/bundle-~51%20KB%20gzip-success)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
+[![Bundle](https://img.shields.io/badge/bundle-~30%20KB%20gzip-success)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
+[![Map](https://img.shields.io/badge/map-rio--map-5A0FC8)](https://github.com/kbrianps/rio-map)
 [![PageSpeed Mobile](https://img.shields.io/badge/PageSpeed%20mobile-99%2F100-brightgreen?logo=pagespeedinsights&logoColor=white)](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fkbrianps.com%2Ftools%2Fonibus-rj-ao-vivo%2F&form_factor=mobile)
 [![PageSpeed Desktop](https://img.shields.io/badge/PageSpeed%20desktop-100%2F100-brightgreen?logo=pagespeedinsights&logoColor=white)](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fkbrianps.com%2Ftools%2Fonibus-rj-ao-vivo%2F&form_factor=desktop)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -34,7 +35,7 @@ Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da S
 
 ### Stack
 
-- **Frontend**: TypeScript + Vite + Leaflet (vanilla, sem framework). Bundle ~50 KB gzip.
+- **Frontend**: TypeScript + Vite + [@kbrianps/rio-map](https://github.com/kbrianps/rio-map) (canvas próprio, ~17 KB gzip). Bundle inicial ~30 KB gzip.
 - **Proxy/API**: Cloudflare Worker (cache do snapshot SPPO, geocoding, dados de rotas).
 - **Tiles**: CartoDB Light All (OpenStreetMap).
 - **Geocoding**: Nominatim/OSM (busca de endereço, reverse geocode do GPS).
@@ -60,12 +61,12 @@ Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da S
 
 ```
 onibus-rj-ao-vivo/
-├── package.json              # frontend (vite, leaflet, vite-plugin-pwa)
+├── package.json              # frontend (vite, @kbrianps/rio-map, vite-plugin-pwa)
 ├── vite.config.ts            # PWA + proxy /api -> :8787
 ├── index.html
 ├── src/
 │   ├── main.ts               # bootstrap, polling, geolocation, glue
-│   ├── map.ts                # Leaflet, marcadores, polyline, máscara
+│   ├── map.ts                # adapter sobre @kbrianps/rio-map (BusWithHeading -> Bus)
 │   ├── api.ts                # fetchBuses, fetchLines, fetchRoute
 │   ├── geocode.ts            # searchPlaces, reverseGeocode
 │   ├── ui.ts                 # busca, autocomplete, estados do botão
@@ -242,7 +243,7 @@ Mobile-first PWA that shows real-time positions of buses operating in the city o
 
 ### Stack
 
-- **Frontend**: TypeScript + Vite + Leaflet (vanilla, no framework). Bundle ~50 KB gzip.
+- **Frontend**: TypeScript + Vite + [@kbrianps/rio-map](https://github.com/kbrianps/rio-map) (own canvas-based map, ~17 KB gzip). Initial bundle ~30 KB gzip.
 - **Proxy/API**: Cloudflare Worker (SPPO snapshot caching, geocoding, route data).
 - **Tiles**: CartoDB Light All (OpenStreetMap).
 - **Geocoding**: Nominatim/OSM (address search and reverse geocoding).
@@ -268,12 +269,12 @@ Mobile-first PWA that shows real-time positions of buses operating in the city o
 
 ```
 onibus-rj-ao-vivo/
-├── package.json              # frontend (vite, leaflet, vite-plugin-pwa)
+├── package.json              # frontend (vite, @kbrianps/rio-map, vite-plugin-pwa)
 ├── vite.config.ts            # PWA + proxy /api -> :8787
 ├── index.html
 ├── src/
 │   ├── main.ts               # bootstrap, polling, geolocation, glue code
-│   ├── map.ts                # Leaflet, markers, polyline, mask
+│   ├── map.ts                # adapter over @kbrianps/rio-map (BusWithHeading -> Bus)
 │   ├── api.ts                # fetchBuses, fetchLines, fetchRoute
 │   ├── geocode.ts            # searchPlaces, reverseGeocode
 │   ├── ui.ts                 # search input, autocomplete, button states

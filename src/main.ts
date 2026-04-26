@@ -1,6 +1,5 @@
 import './styles.css';
-import { initMap as initMapV1, type BusWithHeading } from './map';
-import { initMap as initMapV2 } from './map-v2-adapter';
+import { initMap, type BusWithHeading } from './map';
 import { initUI } from './ui';
 import { fetchBuses, fetchLines, fetchRoute } from './api';
 import { searchPlaces, reverseGeocode } from './geocode';
@@ -22,8 +21,7 @@ const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 2 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
 
-const useMapV2 = new URLSearchParams(location.search).get('map') === 'v2';
-const map = (useMapV2 ? initMapV2 : initMapV1)('map');
+const map = initMap('map');
 const ui = initUI();
 
 let userPos: { lat: number; lng: number } | null = null;

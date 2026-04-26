@@ -1,8 +1,61 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const BASE = process.env.PUBLIC_BASE ?? '/tools/onibus-rj-ao-vivo/';
 const API_PREFIX = `${BASE.replace(/\/$/, '')}/api`;
+
+function inlineCssPlugin(): Plugin {
+  return {
+    name: 'inline-css',
+    enforce: 'post',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      let cssFileName: string | null = null;
+      let cssSource = '';
+      for (const [name, asset] of Object.entries(bundle)) {
+        if (asset.type === 'asset' && name.endsWith('.css')) {
+          cssFileName = name;
+          cssSource =
+            typeof asset.source === 'string'
+              ? asset.source
+              : Buffer.from(asset.source).toString('utf8');
+          delete bundle[name];
+          break;
+        }
+      }
+      if (!cssFileName) return;
+      const cssBase = cssFileName.split('/').pop()!;
+      const linkRe = new RegExp(
+        `<link[^>]*rel=["']stylesheet["'][^>]*href=["'][^"']*${cssBase.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}["'][^>]*>`,
+        'g',
+      );
+      const styleTag = `<style>${cssSource}</style>`;
+      for (const [name, chunk] of Object.entries(bundle)) {
+        if (chunk.type === 'asset' && name.endsWith('.html')) {
+          const html =
+            typeof chunk.source === 'string'
+              ? chunk.source
+              : Buffer.from(chunk.source).toString('utf8');
+          chunk.source = html.replace(linkRe, styleTag);
+        }
+      }
+    },
+  };
+}
+
+function priorityHintsPlugin(): Plugin {
+  return {
+    name: 'priority-hints',
+    enforce: 'post',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(
+        /<script type="module"([^>]*?)src="([^"]+\/index-[^"]+\.js)"([^>]*)>/,
+        '<script type="module"$1src="$2" fetchpriority="high"$3>',
+      );
+    },
+  };
+}
 
 export default defineConfig({
   base: BASE,
@@ -19,9 +72,12 @@ export default defineConfig({
     cssCodeSplit: false,
   },
   plugins: [
+    priorityHintsPlugin(),
+    inlineCssPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+      injectRegister: 'inline',
+      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: 'Ônibus RJ - Ao Vivo',
         short_name: 'Ônibus RJ',

@@ -327,6 +327,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (pathname.startsWith(API_PREFIX)) {
       pathname = pathname.slice(API_PREFIX.length) || '/';
     } else if (env.ASSETS) {
+      const isDocNav =
+        request.method === 'GET' &&
+        (request.headers.get('Sec-Fetch-Mode') === 'navigate' ||
+          (request.headers.get('Accept') || '').includes('text/html'));
+      if (isDocNav) {
+        ctx.waitUntil(loadSnapshot().catch(() => {}));
+      }
       const assetUrl = new URL(request.url);
       assetUrl.pathname = pathname;
       return env.ASSETS.fetch(new Request(assetUrl, request));
@@ -536,6 +543,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
 
     const res = jsonResponse(result, request, env);
+    res.headers.set(
+      'Cache-Control',
+      'public, max-age=0, s-maxage=60, stale-while-revalidate=120',
+    );
     res.headers.set('X-Snapshot-Refreshed-At', String(snap.refreshedAt));
     res.headers.set('X-Snapshot-Refresh-Interval-Ms', String(SNAPSHOT_REFRESH_INTERVAL_MS));
     return res;

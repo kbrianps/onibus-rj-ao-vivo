@@ -32,7 +32,7 @@ Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da S
 ### Funcionalidades
 
 - Mapa interativo focado no município do Rio (máscara branca esmaecida nas áreas vizinhas).
-- Polling a cada 15s da posição dos ônibus da linha selecionada.
+- Polling adaptativo (5–20s) baseado no timestamp do snapshot SPPO — busca o próximo dado logo após a API atualizar, sem desperdiçar requests.
 - Marcador animado dos ônibus (anima posição entre polls).
 - Pin azul (frescos) ou cinza (sem update há mais de 2 minutos).
 - Polilinha da rota oficial (GTFS) sobreposta ao mapa.
@@ -145,6 +145,22 @@ npx wrangler deploy
 - **Direção da seta dos ônibus é aproximada**: calculada pelo bearing entre 2 polls consecutivos. Em ruas curvas ou com GPS ruidoso pode dar diagonal estranha. A correção definitiva (snap-to-polyline da rota GTFS) está planejada — ver Roadmap.
 - **`wrangler dev` (modo local) tem vazamento de file descriptors** em sessões longas. Sintoma: depois de horas com poll de 15s, o worker para de responder. Solução em dev: `pkill -9 workerd && npx wrangler dev`. Em produção CF não acontece.
 
+### Modo debug
+
+Adicione `?debug=1` na URL (ou `localStorage.setItem('onibus-rj:debug', '1')`) para ligar o HUD de métricas. Ele mostra, em tempo real:
+
+- Heap JS (usado/limite/%) e FPS.
+- Contagem e tempo médio/último de cada endpoint (`/sppo`, `/lines`, `/route`, `/geocode`, `/reverse`, tiles).
+- Status HTTP e tamanho da última resposta por endpoint, com contador de erros.
+- Tiles carregados + tempo médio.
+- Snap-to-route: total de chamadas + média em microssegundos.
+- Console errors + últimos 5 erros (mensagem truncada).
+- Online/offline, uptime da sessão, user-agent.
+
+Botão `copy json` exporta um snapshot completo pra colar em issue/PR. Botão `×` desliga e remove a flag do localStorage.
+
+O HUD é **carregado sob demanda** (dynamic import), então não pesa nada no bundle padrão — só o stub de ~150 bytes vai pra produção. Use pra investigar lentidão, regressão de tamanho de payload ou para abrir issues com dados concretos.
+
 ### CI/CD
 
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): rodada em todo push/PR — typecheck + vitest + build.
@@ -223,7 +239,7 @@ Mobile-first PWA that shows real-time positions of buses operating in the city o
 ### Features
 
 - Interactive map focused on the Rio municipality (faded white mask over neighbouring areas).
-- Polls bus positions every 15s for the selected line.
+- Adaptive polling (5–20s) based on the SPPO snapshot server timestamp — fetches just after the upstream API refreshes, never wasting requests.
 - Animated bus markers (interpolates between poll positions).
 - Blue pins (fresh) or grey (no update for 2+ minutes).
 - Official route polyline (GTFS) overlaid on the map.
@@ -335,6 +351,22 @@ npx wrangler deploy
 - **Brazilian OSM data lacks house numbers**: address search finds the street but not the exact number. Trailing numbers are stripped from the query before being sent to Nominatim.
 - **Bus arrow direction is approximate**: computed by bearing between two consecutive polls. On curvy streets or with noisy GPS it may point oddly. A proper fix (snap-to-polyline using the GTFS route) is planned — see Roadmap.
 - **`wrangler dev` (local mode) leaks file descriptors** during long sessions. Symptom: after hours of 15s polling, the worker stops responding. Dev workaround: `pkill -9 workerd && npx wrangler dev`. Does not happen on production Cloudflare Workers.
+
+### Debug mode
+
+Append `?debug=1` to the URL (or `localStorage.setItem('onibus-rj:debug', '1')`) to toggle the live metrics HUD. It shows, in real time:
+
+- JS heap (used/limit/%) and FPS.
+- Per-endpoint count + avg/last time (`/sppo`, `/lines`, `/route`, `/geocode`, `/reverse`, tiles).
+- Last HTTP status and response size per endpoint, with an error counter.
+- Tiles loaded + average load time.
+- Snap-to-route: total calls + average in microseconds.
+- Console error count + last 5 messages (truncated).
+- Online/offline, session uptime, user-agent.
+
+A `copy json` button exports a full snapshot you can paste into issues/PRs. The `×` button disables the HUD and clears the localStorage flag.
+
+The HUD is **lazy-loaded** (dynamic import), so it adds nothing to the default bundle — only a ~150-byte stub ships in production. Use it to investigate slowdowns, payload-size regressions, or to file actionable bug reports.
 
 ### API protection
 

@@ -6,11 +6,16 @@ import { searchPlaces, reverseGeocode } from './geocode';
 import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
 import { getCurrentPosition, watchPosition } from './geo';
 import { bearingDeg, type Bus } from './types';
-import { initDebug, isDebugEnabled, trackSnap } from './debug';
+import { isDebugEnabled, trackSnap } from './debug';
 
-if (isDebugEnabled()) initDebug();
+if (isDebugEnabled()) {
+  void import('./debug-hud').then((m) => m.initDebugHud());
+}
 
-const POLL_MS = 10_000;
+const SPPO_REFRESH_MS = 20_000;
+const POLL_MIN_MS = 5_000;
+const POLL_MAX_MS = 20_000;
+const POLL_BUFFER_MS = 2_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 2 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
@@ -111,9 +116,26 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
 
 let submitStateTimer: number | null = null;
 
+function nextPollDelay(buses: BusWithHeading[]): number {
+  if (!buses.length) return POLL_MAX_MS;
+  let newest = 0;
+  for (const b of buses) if (b.serverTimestamp > newest) newest = b.serverTimestamp;
+  const ageMs = Date.now() - newest;
+  const delay = SPPO_REFRESH_MS - ageMs + POLL_BUFFER_MS;
+  return Math.max(POLL_MIN_MS, Math.min(POLL_MAX_MS, delay));
+}
+
+function schedulePoll(ms: number) {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = window.setTimeout(tick, ms);
+}
+
 async function tick() {
   if (!currentLine) return;
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') {
+    schedulePoll(POLL_MAX_MS);
+    return;
+  }
   abortCtrl?.abort();
   abortCtrl = new AbortController();
   try {
@@ -127,6 +149,7 @@ async function tick() {
       if (submitStateTimer) clearTimeout(submitStateTimer);
       submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
     }
+    schedulePoll(nextPollDelay(buses));
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     if (isFirstFetch) {
@@ -134,6 +157,7 @@ async function tick() {
       ui.setSubmitState('idle');
     }
     console.error(err);
+    schedulePoll(POLL_MAX_MS);
   }
 }
 
@@ -151,7 +175,7 @@ async function startPolling(line: string) {
   }
   saveLastLine(line);
   map.setRoute(null);
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) clearTimeout(pollTimer);
   try {
     const r = await fetchRoute(line);
     currentRoute = r ? r.shapes : null;
@@ -160,7 +184,6 @@ async function startPolling(line: string) {
     console.error('route', err);
   }
   tick();
-  pollTimer = window.setInterval(tick, POLL_MS);
 }
 
 ui.onSubmitLine(startPolling);

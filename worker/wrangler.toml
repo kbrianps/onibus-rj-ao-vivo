@@ -25,8 +25,18 @@ zone_id = "0c431faf60029ddeb333942fbffcc58b"
 pattern = "www.kbrianps.com/tools/onibus-rj-ao-vivo/*"
 zone_id = "0c431faf60029ddeb333942fbffcc58b"
 
+[[routes]]
+pattern = "kbrianps.com/.well-known/assetlinks.json"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
+
+[[routes]]
+pattern = "www.kbrianps.com/.well-known/assetlinks.json"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
+
 [vars]
 ALLOWED_ORIGINS = "https://kbrianps.com,https://www.kbrianps.com"
+TWA_PACKAGE_NAME = "com.kbrianps.onibusrjaovivo"
+TWA_FINGERPRINTS = ""
 
 [triggers]
 crons = ["* * * * *"]

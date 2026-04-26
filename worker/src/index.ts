@@ -141,6 +141,32 @@ interface Env {
   ALLOWED_ORIGINS?: string;
   RATE_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   ROUTES: R2Bucket;
+  TWA_PACKAGE_NAME?: string;
+  TWA_FINGERPRINTS?: string;
+}
+
+function assetLinksResponse(env: Env): Response {
+  const fingerprints = (env.TWA_FINGERPRINTS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const body = JSON.stringify([
+    {
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: {
+        namespace: 'android_app',
+        package_name: env.TWA_PACKAGE_NAME ?? 'com.kbrianps.onibusrjaovivo',
+        sha256_cert_fingerprints: fingerprints,
+      },
+    },
+  ]);
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
 }
 
 let routesCache: Record<string, string[]> | null = null;
@@ -161,6 +187,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
     const url = new URL(request.url);
+
+    if (url.pathname === '/.well-known/assetlinks.json') {
+      return assetLinksResponse(env);
+    }
+
     let pathname = url.pathname;
     if (pathname.startsWith(PATH_PREFIX)) {
       pathname = pathname.slice(PATH_PREFIX.length) || '/';

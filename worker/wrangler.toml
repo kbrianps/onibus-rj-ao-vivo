@@ -28,6 +28,9 @@ zone_id = "0c431faf60029ddeb333942fbffcc58b"
 [vars]
 ALLOWED_ORIGINS = "https://kbrianps.com,https://www.kbrianps.com"
 
+[triggers]
+crons = ["* * * * *"]
+
 [[unsafe.bindings]]
 name = "RATE_LIMITER"
 type = "ratelimit"

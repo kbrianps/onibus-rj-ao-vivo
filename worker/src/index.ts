@@ -24,8 +24,10 @@ interface Bus {
 }
 
 const SOURCE = 'https://dados.mobilidade.rio/gps/sppo';
-const SNAPSHOT_TTL_S = 15;
+const SNAPSHOT_TTL_S = 80;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const SNAPSHOT_CACHE_KEY = new Request('https://onibus-rj-cache/snapshot', { method: 'GET' });
+const UA_RE = /(Mozilla|Chrome|Safari|Firefox|Edge|Opera|OPR|SamsungBrowser|UCBrowser|Vivaldi)/i;
 
 function getAllowedOrigins(env: Env): Set<string> {
   return new Set(
@@ -48,6 +50,11 @@ function isAllowedOrigin(request: Request, env: Env): boolean {
     } catch {}
   }
   return false;
+}
+
+function looksLikeBrowser(request: Request): boolean {
+  const ua = request.headers.get('User-Agent') || '';
+  return UA_RE.test(ua);
 }
 
 function corsHeaders(request: Request, env: Env): Record<string, string> {
@@ -91,13 +98,7 @@ function parseBbox(s: string | null): [number, number, number, number] | null {
   return [minLat, minLng, maxLat, maxLng];
 }
 
-async function loadSnapshot(ctx: ExecutionContext): Promise<Bus[]> {
-  const cacheKey = new Request('https://onibus-rj-cache/snapshot', { method: 'GET' });
-  const cache = caches.default;
-  const hit = await cache.match(cacheKey);
-  if (hit) {
-    return hit.json<Bus[]>();
-  }
+async function refreshSnapshot(): Promise<Bus[]> {
   const res = await fetch(SOURCE, {
     headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
     cf: { cacheTtl: SNAPSHOT_TTL_S, cacheEverything: true },
@@ -118,8 +119,14 @@ async function loadSnapshot(ctx: ExecutionContext): Promise<Bus[]> {
       'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
     },
   });
-  ctx.waitUntil(cache.put(cacheKey, stored.clone()));
+  await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
   return buses;
+}
+
+async function loadSnapshot(): Promise<Bus[]> {
+  const hit = await caches.default.match(SNAPSHOT_CACHE_KEY);
+  if (hit) return hit.json<Bus[]>();
+  return refreshSnapshot();
 }
 
 function jsonResponse(body: unknown, request: Request, env: Env, status = 200): Response {
@@ -142,8 +149,7 @@ interface Env {
 const PATH_PREFIX = '/tools/onibus-rj-ao-vivo';
 const API_PREFIX = '/api';
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
@@ -168,11 +174,19 @@ export default {
       return jsonResponse({ error: 'forbidden' }, request, env, 403);
     }
 
+    if (!looksLikeBrowser(request)) {
+      return jsonResponse({ error: 'forbidden' }, request, env, 403);
+    }
+
     if (env.RATE_LIMITER) {
-      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-      const { success } = await env.RATE_LIMITER.limit({ key: ip });
-      if (!success) {
-        return jsonResponse({ error: 'rate limit exceeded' }, request, env, 429);
+      try {
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const { success } = await env.RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonResponse({ error: 'rate limit exceeded' }, request, env, 429);
+        }
+      } catch (err) {
+        console.error('rate limiter failed', err);
       }
     }
 
@@ -193,7 +207,7 @@ export default {
     if (pathname === '/lines') {
       let snapshot: Bus[];
       try {
-        snapshot = await loadSnapshot(ctx);
+        snapshot = await loadSnapshot();
       } catch (err) {
         return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
       }
@@ -328,7 +342,7 @@ export default {
 
     let snapshot: Bus[];
     try {
-      snapshot = await loadSnapshot(ctx);
+      snapshot = await loadSnapshot();
     } catch (err) {
       return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
     }
@@ -344,5 +358,20 @@ export default {
     }
 
     return jsonResponse(result, request, env);
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      return await handle(request, env, ctx);
+    } catch (err) {
+      console.error('worker error', err);
+      return jsonResponse({ error: 'internal error' }, request, env, 500);
+    }
+  },
+  async scheduled(_event: ScheduledEvent, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      refreshSnapshot().catch((err) => console.error('scheduled refresh failed', err)),
+    );
   },
 };

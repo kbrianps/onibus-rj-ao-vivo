@@ -266,6 +266,7 @@ ui.onPickPlace((place) => {
   map.map.flyTo([place.lat, place.lng], 15, { duration: 0.6 });
 });
 
+let watchStarted = false;
 document.getElementById('recenter')?.addEventListener('click', async () => {
   try {
     const pos = await getCurrentPosition();
@@ -273,6 +274,13 @@ document.getElementById('recenter')?.addEventListener('click', async () => {
     manualPos = null;
     map.setUser(userPos.lat, userPos.lng);
     map.recenter();
+    if (!watchStarted) {
+      watchStarted = true;
+      watchPosition((p) => {
+        userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+        if (!manualPos) map.setUser(userPos.lat, userPos.lng);
+      });
+    }
     reverseGeocode(userPos.lat, userPos.lng)
       .then((place) => {
         if (place) ui.setSearchValue(place.label);
@@ -287,7 +295,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && currentLine) tick();
 });
 
-(async () => {
+(() => {
   const saved = loadLastLocation();
   if (saved) {
     manualPos = { lat: saved.lat, lng: saved.lng };
@@ -298,24 +306,7 @@ document.addEventListener('visibilitychange', () => {
     }
     map.setUser(saved.lat, saved.lng);
     map.recenter();
-  } else {
-    try {
-      const pos = await getCurrentPosition();
-      userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      map.setUser(userPos.lat, userPos.lng);
-      map.recenter();
-      reverseGeocode(userPos.lat, userPos.lng)
-        .then((place) => {
-          if (place && !manualPos) ui.setSearchValue(place.label);
-        })
-        .catch(() => {});
-    } catch {}
   }
-
-  watchPosition((p) => {
-    userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
-    if (!manualPos) map.setUser(userPos.lat, userPos.lng);
-  });
 
   const last = loadLastLine();
   if (last) ui.setLineValue(last);

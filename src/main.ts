@@ -10,6 +10,7 @@ import { bearingDeg, type Bus } from './types';
 const POLL_MS = 15_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 2 * 60 * 1000;
+const SNAP_MAX_DIST_M = 120;
 
 const map = initMap('map');
 const ui = initUI();
@@ -17,11 +18,42 @@ const ui = initUI();
 let userPos: { lat: number; lng: number } | null = null;
 let manualPos: { lat: number; lng: number } | null = null;
 let currentLine: string | null = null;
+let currentRoute: number[][][] | null = null;
 let pollTimer: number | null = null;
 let abortCtrl: AbortController | null = null;
 let isFirstFetch = false;
 
 const lastBy = new Map<string, { lat: number; lng: number; heading: number | null }>();
+
+function snapToRoute(
+  lat: number,
+  lng: number,
+  shapes: number[][][],
+): { distM: number; bearing: number } | null {
+  let best: { distM: number; bearing: number } | null = null;
+  for (const shape of shapes) {
+    for (let i = 0; i < shape.length - 1; i++) {
+      const [aLat, aLng] = shape[i];
+      const [bLat, bLng] = shape[i + 1];
+      const dx = bLng - aLng;
+      const dy = bLat - aLat;
+      const lenSq = dx * dx + dy * dy;
+      let pLat = aLat;
+      let pLng = aLng;
+      if (lenSq > 0) {
+        let t = ((lng - aLng) * dx + (lat - aLat) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        pLat = aLat + t * dy;
+        pLng = aLng + t * dx;
+      }
+      const distM = metersBetween({ lat, lng }, { lat: pLat, lng: pLng });
+      if (!best || distM < best.distM) {
+        best = { distM, bearing: bearingDeg(aLat, aLng, bLat, bLng) };
+      }
+    }
+  }
+  return best;
+}
 
 function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371e3;
@@ -38,12 +70,24 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
   return buses.map((b) => {
     const prev = lastBy.get(b.vehicleId);
     let heading: number | null = prev?.heading ?? null;
-    if (prev) {
+
+    if (currentRoute) {
+      const snap = snapToRoute(b.lat, b.lng, currentRoute);
+      if (snap && snap.distM <= SNAP_MAX_DIST_M) {
+        heading = snap.bearing;
+      } else if (prev) {
+        const moved = metersBetween(prev, b);
+        if (moved >= MIN_MOVE_M_FOR_BEARING) {
+          heading = bearingDeg(prev.lat, prev.lng, b.lat, b.lng);
+        }
+      }
+    } else if (prev) {
       const moved = metersBetween(prev, b);
       if (moved >= MIN_MOVE_M_FOR_BEARING) {
         heading = bearingDeg(prev.lat, prev.lng, b.lat, b.lng);
       }
     }
+
     lastBy.set(b.vehicleId, { lat: b.lat, lng: b.lng, heading });
     const stale = now - b.serverTimestamp > STALE_MS;
     return { ...b, heading, stale };
@@ -78,10 +122,11 @@ async function tick() {
   }
 }
 
-function startPolling(line: string) {
+async function startPolling(line: string) {
   currentLine = line;
   isFirstFetch = true;
   lastBy.clear();
+  currentRoute = null;
   ui.setLineValue(line);
   ui.setSubmitState('loading');
   if (submitStateTimer) {
@@ -90,10 +135,14 @@ function startPolling(line: string) {
   }
   saveLastLine(line);
   map.setRoute(null);
-  fetchRoute(line)
-    .then((r) => map.setRoute(r ? r.shapes : null))
-    .catch((err) => console.error('route', err));
   if (pollTimer) clearInterval(pollTimer);
+  try {
+    const r = await fetchRoute(line);
+    currentRoute = r ? r.shapes : null;
+    map.setRoute(currentRoute);
+  } catch (err) {
+    console.error('route', err);
+  }
   tick();
   pollTimer = window.setInterval(tick, POLL_MS);
 }

@@ -17,5 +17,13 @@ zone_id = "0c431faf60029ddeb333942fbffcc58b"
 pattern = "kbrianps.com/tools/onibus-rj-ao-vivo/*"
 zone_id = "0c431faf60029ddeb333942fbffcc58b"
 
+[[routes]]
+pattern = "www.kbrianps.com/tools/onibus-rj-ao-vivo"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
+
+[[routes]]
+pattern = "www.kbrianps.com/tools/onibus-rj-ao-vivo/*"
+zone_id = "0c431faf60029ddeb333942fbffcc58b"
+
 [dev]
 port = 8787

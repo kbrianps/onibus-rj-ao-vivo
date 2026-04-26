@@ -2,6 +2,8 @@
 
 Acompanhe os ônibus do município do Rio de Janeiro em tempo real, no mapa.
 
+**App ao vivo: https://kbrianps.com/tools/onibus-rj-ao-vivo/**
+
 [Português](#português) · [English](#english)
 
 ---
@@ -134,6 +136,11 @@ cd worker && npx wrangler deploy
 - **Direção da seta dos ônibus é aproximada**: calculada pelo bearing entre 2 polls consecutivos. Em ruas curvas ou com GPS ruidoso pode dar diagonal estranha. A correção definitiva (snap-to-polyline da rota GTFS) está planejada — ver Roadmap.
 - **`wrangler dev` (modo local) tem vazamento de file descriptors** em sessões longas. Sintoma: depois de horas com poll de 15s, o worker para de responder. Solução em dev: `pkill -9 workerd && npx wrangler dev`. Em produção CF não acontece.
 
+### CI/CD
+
+- **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): rodada em todo push/PR — typecheck + vitest + build.
+- **Deploy** ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)): em push pra `main`, faz build e roda `wrangler deploy` pelo `cloudflare/wrangler-action@v3`. Requer 2 secrets no repo: `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID`.
+
 ### Roadmap
 
 - [x] Mapa, polling SPPO, marcadores animados, máscara do município
@@ -141,7 +148,7 @@ cd worker && npx wrangler deploy
 - [x] Autocomplete de linhas
 - [x] Persistência de linha e local
 - [x] Polilinha da rota oficial (GTFS)
-- [ ] **Fase 2**: snap-to-polyline pra direção correta da seta (a partir do bearing do segmento da rota mais próximo do ônibus)
+- [x] Snap-to-polyline pra direção correta da seta (bearing do segmento da rota mais próximo do ônibus, fallback pra bearing entre polls quando off-route)
 - [ ] **Fase 3**: cores ida/volta distintas, ETA estimado, highlight do trecho próximo do usuário
 - [ ] Compressão polyline encoding (~80% menor que JSON puro)
 - [ ] Lazy-loading de rotas via R2 (Worker bundle vira trivial)
@@ -299,7 +306,7 @@ cd worker && npx wrangler deploy
 - [x] Line autocomplete
 - [x] Persisted line + location
 - [x] Official route polyline (GTFS)
-- [ ] **Phase 2**: snap-to-polyline for correct arrow direction (using bearing of nearest GTFS segment)
+- [x] Snap-to-polyline for correct arrow direction (bearing from the closest route segment, falling back to inter-poll bearing when off-route)
 - [ ] **Phase 3**: distinct colours for outbound/inbound, ETA estimation, highlight nearby route segment
 - [ ] Polyline encoding compression (~80% smaller than raw JSON)
 - [ ] Lazy-load routes via R2 (worker bundle becomes trivial)

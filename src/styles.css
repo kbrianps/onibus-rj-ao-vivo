@@ -128,7 +128,8 @@ body {
   color: var(--muted);
 }
 
-#search-input::-webkit-search-cancel-button {
+#search-input::-webkit-search-cancel-button,
+#line-input::-webkit-search-cancel-button {
   display: none;
 }
 

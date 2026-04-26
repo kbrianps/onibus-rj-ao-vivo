@@ -1,5 +1,17 @@
 # Ônibus RJ - Ao Vivo
 
+[![CI](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml/badge.svg)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
+[![Deploy](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/deploy.yml/badge.svg)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/deploy.yml)
+[![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-17%20passing-success)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
+[![Bundle](https://img.shields.io/badge/bundle-~51%20KB%20gzip-success)](https://github.com/kbrianps/onibus-rj-ao-vivo/actions/workflows/ci.yml)
+[![PageSpeed Mobile](https://img.shields.io/badge/PageSpeed%20mobile-99%2F100-brightgreen?logo=pagespeedinsights&logoColor=white)](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fkbrianps.com%2Ftools%2Fonibus-rj-ao-vivo%2F&form_factor=mobile)
+[![PageSpeed Desktop](https://img.shields.io/badge/PageSpeed%20desktop-100%2F100-brightgreen?logo=pagespeedinsights&logoColor=white)](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fkbrianps.com%2Ftools%2Fonibus-rj-ao-vivo%2F&form_factor=desktop)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?logo=pwa&logoColor=white)](https://web.dev/progressive-web-apps/)
+
 Acompanhe os ônibus do município do Rio de Janeiro em tempo real, no mapa.
 
 **App ao vivo: https://kbrianps.com/tools/onibus-rj-ao-vivo/**

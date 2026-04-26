@@ -51,12 +51,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/[abcd]\.basemaps\.cartocdn\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'carto-tiles',
+              cacheName: 'carto-tiles-v1',
               expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
@@ -64,15 +65,15 @@ export default defineConfig({
             urlPattern: /\/api\/lines$/i,
             handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'sppo-lines',
+              cacheName: 'sppo-lines-v2',
               expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 },
             },
           },
           {
             urlPattern: /\/api\/route\?.*/i,
-            handler: 'CacheFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'sppo-routes',
+              cacheName: 'sppo-routes-v2',
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },

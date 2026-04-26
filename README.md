@@ -141,6 +141,25 @@ cd worker && npx wrangler deploy
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): rodada em todo push/PR — typecheck + vitest + build.
 - **Deploy** ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)): em push pra `main`, faz build e roda `wrangler deploy` pelo `cloudflare/wrangler-action@v3`. Requer 2 secrets no repo: `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID`.
 
+### Proteção da API
+
+A API (`/api/*`) é destinada apenas ao próprio app. Camadas implementadas:
+
+1. **Origin/Referer check** (Worker, no código): só aceita requests com `Origin` ou `Referer` em `ALLOWED_ORIGINS`. Configurado via var no `wrangler.toml`:
+   - Prod: `https://kbrianps.com`, `https://www.kbrianps.com`
+   - Dev (env `dev`): adiciona `localhost:5173` e `127.0.0.1:5173`
+   - `/health` é o único endpoint exposto sem checagem (pra monitoramento)
+2. **CORS restritivo** (Worker): `Access-Control-Allow-Origin` só ecoa o origin da request quando ele está na lista permitida. Browsers bloqueiam outros sites de chamar nossa API.
+3. **Rate limit** (Workers Rate Limiting binding): 120 req/min/IP. Cobre uso normal (4 req/min × 30 abas), mata abuso/scrapping.
+
+Camadas adicionais (configuráveis no Cloudflare Dashboard, sem código):
+
+4. **Bot Fight Mode** (gratuito): `Security → Bots → Bot Fight Mode = On`. Bloqueia bots conhecidos automaticamente.
+5. **WAF Rate Limit Rules** (gratuito até 10k req/mês): mais granular que o binding nativo, dá pra setar por path/método/etc.
+6. **Turnstile** (gratuito, próximo passo): widget invisível que valida humano vs bot. Adiciona um token na request, validado no Worker. Implementação não está nesta versão.
+
+Realismo: API consumida por JS no browser nunca é 100% privada — o JS é aberto, qualquer um pode replicar requests com headers spoofados. As camadas acima cobrem 95-99% dos casos comuns sem prejudicar o usuário legítimo.
+
 ### Roadmap
 
 - [x] Mapa, polling SPPO, marcadores animados, máscara do município
@@ -298,6 +317,25 @@ cd worker && npx wrangler deploy
 - **Brazilian OSM data lacks house numbers**: address search finds the street but not the exact number. Trailing numbers are stripped from the query before being sent to Nominatim.
 - **Bus arrow direction is approximate**: computed by bearing between two consecutive polls. On curvy streets or with noisy GPS it may point oddly. A proper fix (snap-to-polyline using the GTFS route) is planned — see Roadmap.
 - **`wrangler dev` (local mode) leaks file descriptors** during long sessions. Symptom: after hours of 15s polling, the worker stops responding. Dev workaround: `pkill -9 workerd && npx wrangler dev`. Does not happen on production Cloudflare Workers.
+
+### API protection
+
+The API (`/api/*`) is meant for the app itself. Layers in place:
+
+1. **Origin/Referer check** (Worker, code): rejects requests whose `Origin`/`Referer` is not in `ALLOWED_ORIGINS`. Configured via `wrangler.toml` var:
+   - Prod: `https://kbrianps.com`, `https://www.kbrianps.com`
+   - Dev env: adds `localhost:5173` / `127.0.0.1:5173`
+   - `/health` is the only endpoint exposed without checks (for monitoring)
+2. **Restrictive CORS** (Worker): `Access-Control-Allow-Origin` only echoes the request origin if it's in the allowed list. Browsers block other sites from calling the API.
+3. **Rate limit** (Workers Rate Limiting binding): 120 req/min/IP. Covers normal use (4 req/min × 30 tabs), kills scraping/abuse.
+
+Additional layers (Cloudflare Dashboard, no code):
+
+4. **Bot Fight Mode** (free): `Security → Bots → Bot Fight Mode = On`. Auto-blocks known bots.
+5. **WAF Rate Limit Rules** (free up to 10k req/month): more granular than the native binding (per path/method/etc).
+6. **Turnstile** (free, next step): invisible widget that validates human vs bot. Adds a token to each request, validated by the Worker. Not implemented yet.
+
+Honest take: an API consumed by browser JS can never be 100% private — JS is open, anyone can replay requests with spoofed headers. The layers above cover 95-99% of common abuse without hurting real users.
 
 ### Roadmap
 

@@ -239,28 +239,31 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  try {
-    const pos = await getCurrentPosition();
-    userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    map.setUser(userPos.lat, userPos.lng);
+  const saved = loadLastLocation();
+  if (saved) {
+    manualPos = { lat: saved.lat, lng: saved.lng };
+    if (saved.label) ui.setSearchValue(saved.label);
+    map.setUser(saved.lat, saved.lng);
     map.recenter();
-    reverseGeocode(userPos.lat, userPos.lng)
-      .then((place) => {
-        if (place && !manualPos) ui.setSearchValue(place.label);
-      })
-      .catch(() => {});
-    watchPosition((p) => {
-      userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
-      if (!manualPos) map.setUser(userPos.lat, userPos.lng);
-    });
-  } catch {
-    const saved = loadLastLocation();
-    if (saved) {
-      manualPos = { lat: saved.lat, lng: saved.lng };
-      map.setUser(saved.lat, saved.lng);
+  } else {
+    try {
+      const pos = await getCurrentPosition();
+      userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      map.setUser(userPos.lat, userPos.lng);
       map.recenter();
-    }
+      reverseGeocode(userPos.lat, userPos.lng)
+        .then((place) => {
+          if (place && !manualPos) ui.setSearchValue(place.label);
+        })
+        .catch(() => {});
+    } catch {}
   }
+
+  watchPosition((p) => {
+    userPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+    if (!manualPos) map.setUser(userPos.lat, userPos.lng);
+  });
+
   const last = loadLastLine();
   if (last) startPolling(last);
   document.body.classList.add('ready');

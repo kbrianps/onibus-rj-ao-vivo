@@ -322,7 +322,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (pathname === '/geocode') {
       const q = url.searchParams.get('q')?.trim();
       if (!q || q.length < 2) return jsonResponse({ error: 'q required' }, request, env, 400);
-      const cacheKey = new Request(`https://onibus-rj-cache/geocode?q=${encodeURIComponent(q.toLowerCase())}`);
+      const cacheKey = new Request(`https://onibus-rj-cache/geocode/v2?q=${encodeURIComponent(q.toLowerCase())}`);
       const cached = await caches.default.match(cacheKey);
       if (cached) return cached;
       const upstream = await fetch(
@@ -362,15 +362,21 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
           seen.add(key);
           return true;
         });
-      const res = new Response(JSON.stringify(results), {
+      const body = JSON.stringify(results);
+      const stored = new Response(body, {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'public, max-age=86400',
+        },
+      });
+      ctx.waitUntil(caches.default.put(cacheKey, stored));
+      return new Response(body, {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'public, max-age=300, s-maxage=300',
           ...corsHeaders(request, env),
         },
       });
-      ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
-      return res;
     }
 
     if (pathname !== '/sppo') {

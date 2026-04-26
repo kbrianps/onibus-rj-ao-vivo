@@ -212,8 +212,7 @@ ui.onSearchInput(async (q) => {
   try {
     const results = await searchPlaces(q, searchAbort.signal);
     ui.setSearchResults(results);
-    ui.setSearchState('success');
-    searchStateTimer = window.setTimeout(() => ui.setSearchState('idle'), 2500);
+    ui.setSearchState('idle');
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     ui.setSearchState('idle');
@@ -228,6 +227,9 @@ ui.onPickPlace((place) => {
   const shortLabel = area && area !== primary ? `${primary}, ${area}` : primary;
   saveLastLocation({ lat: place.lat, lng: place.lng, label: shortLabel });
   ui.setSearchValue(shortLabel);
+  ui.setSearchState('success');
+  if (searchStateTimer) clearTimeout(searchStateTimer);
+  searchStateTimer = window.setTimeout(() => ui.setSearchState('idle'), 2500);
   map.setUser(place.lat, place.lng);
   map.map.flyTo([place.lat, place.lng], 15, { duration: 0.6 });
 });

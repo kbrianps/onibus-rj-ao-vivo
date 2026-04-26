@@ -41,8 +41,36 @@ export function initMap(containerId: string): MapHandle {
       maxZoom: 19,
       subdomains: 'abcd',
       attribution: '&copy; OpenStreetMap &copy; CARTO',
+      keepBuffer: 6,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
     },
   ).addTo(map);
+
+  map.getContainer().addEventListener('contextmenu', (e) => e.preventDefault());
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === '=' || e.key === '+' || e.key === 'Add') {
+        e.preventDefault();
+        map.zoomIn();
+      } else if (e.key === '-' || e.key === '_' || e.key === 'Subtract') {
+        e.preventDefault();
+        map.zoomOut();
+      }
+    },
+    { passive: false },
+  );
+
+  map.getContainer().addEventListener(
+    'wheel',
+    (e) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    },
+    { passive: false },
+  );
 
   const worldRing: L.LatLngTuple[] = [
     [-90, -180],

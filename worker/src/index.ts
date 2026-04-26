@@ -145,6 +145,95 @@ interface Env {
   TWA_FINGERPRINTS?: string;
 }
 
+function privacyPolicyResponse(): Response {
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade — Ônibus RJ - Ao Vivo</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #0f172a; background: #f8fafc; line-height: 1.55; }
+  main { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  h1 { margin: 0 0 0.25rem; font-size: 1.7rem; line-height: 1.2; }
+  .updated { color: #64748b; font-size: 0.85rem; margin-bottom: 2rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #0f172a; }
+  p, ul { margin: 0.5rem 0; }
+  ul { padding-left: 1.25rem; }
+  li { margin-bottom: 0.35rem; }
+  a { color: #0ea5e9; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #e2e8f0; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.9em; }
+  .nav { font-size: 0.9rem; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<main>
+  <p class="nav"><a href="/tools/onibus-rj-ao-vivo/">← Voltar ao app</a></p>
+
+  <h1>Política de Privacidade</h1>
+  <p class="updated">Última atualização: 26 de abril de 2026</p>
+
+  <p>O <strong>Ônibus RJ - Ao Vivo</strong> é um app que mostra a posição em tempo real dos ônibus do município do Rio de Janeiro. Nosso princípio é simples: <strong>coletamos o mínimo possível</strong>. Esta página descreve exatamente o que acontece com seus dados.</p>
+
+  <h2>Quem somos</h2>
+  <p>App pessoal mantido por Brian Pravato. Código-fonte aberto em <a href="https://github.com/kbrianps/onibus-rj-ao-vivo">github.com/kbrianps/onibus-rj-ao-vivo</a> (licença GPLv3).</p>
+
+  <h2>O que NÃO coletamos</h2>
+  <ul>
+    <li>Não temos cadastro, login ou conta de usuário.</li>
+    <li>Não enviamos sua localização GPS para nossos servidores. O GPS é usado apenas no seu dispositivo, para mostrar onde você está no mapa.</li>
+    <li>Não usamos cookies de rastreamento.</li>
+    <li>Não usamos rede de anúncios.</li>
+    <li>Não vendemos nem compartilhamos dados com terceiros para fins comerciais.</li>
+  </ul>
+
+  <h2>O que é coletado e por quê</h2>
+  <ul>
+    <li><strong>Endereço IP e User-Agent</strong>: registrados temporariamente pelo nosso provedor de infraestrutura (Cloudflare) para proteção contra abuso (rate limit, anti-bot). Esses logs ficam apenas no servidor por curto prazo.</li>
+    <li><strong>Linha selecionada e último local de busca</strong>: salvos no <code>localStorage</code> do seu navegador, no seu próprio dispositivo. Não saem dele. Você pode limpar nas configurações do navegador.</li>
+    <li><strong>Texto de busca (endereço/bairro)</strong>: enviado ao nosso servidor para responder a busca. Não é vinculado a você nem armazenado para análise.</li>
+  </ul>
+
+  <h2>Serviços externos que consultamos</h2>
+  <p>Para entregar o app, fazemos chamadas a serviços públicos:</p>
+  <ul>
+    <li><strong>SPPO / Mobilidade Rio</strong> (Prefeitura do Rio): origem dos dados de posição dos ônibus.</li>
+    <li><strong>OpenStreetMap / CartoDB</strong>: tiles do mapa.</li>
+    <li><strong>Nominatim (OpenStreetMap)</strong>: busca de endereço e geocodificação reversa. Recebem o texto da busca ou as coordenadas que você está consultando.</li>
+    <li><strong>IBGE</strong>: limites do município (carga única).</li>
+    <li><strong>Cloudflare</strong>: hospedagem e CDN. Aplica políticas próprias de log e segurança.</li>
+  </ul>
+
+  <h2>Permissões do dispositivo</h2>
+  <ul>
+    <li><strong>Localização</strong> (opcional): se você permitir, o app usa o GPS para centralizar o mapa em você. Pode negar e usar a busca por endereço como alternativa. A coordenada nunca é enviada aos nossos servidores.</li>
+  </ul>
+
+  <h2>Crianças</h2>
+  <p>O app é de uso geral. Não direcionamos a crianças menores de 13 anos e não coletamos conscientemente dados de menores.</p>
+
+  <h2>Seus direitos (LGPD)</h2>
+  <p>Como praticamente não armazenamos dados pessoais identificáveis, não há dados a corrigir, exportar ou apagar do nosso lado. Para limpar a linha e o local salvos no seu dispositivo, basta limpar o armazenamento local do navegador (Configurações → Privacidade → Dados de sites → kbrianps.com).</p>
+
+  <h2>Alterações</h2>
+  <p>Mudanças nesta política serão publicadas nesta mesma URL com a data atualizada no topo. Mudanças relevantes podem ser anunciadas no app.</p>
+
+  <h2>Contato</h2>
+  <p>Dúvidas, pedidos ou denúncias: <a href="mailto:kbrianps@gmail.com">kbrianps@gmail.com</a> ou via <a href="https://github.com/kbrianps/onibus-rj-ao-vivo/issues">GitHub Issues</a>.</p>
+</main>
+</body>
+</html>`;
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}
+
 function assetLinksResponse(env: Env): Response {
   const fingerprints = (env.TWA_FINGERPRINTS ?? '')
     .split(',')
@@ -190,6 +279,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
     if (url.pathname === '/.well-known/assetlinks.json') {
       return assetLinksResponse(env);
+    }
+
+    if (
+      url.pathname === '/tools/onibus-rj-ao-vivo/privacidade' ||
+      url.pathname === '/tools/onibus-rj-ao-vivo/privacidade/'
+    ) {
+      return privacyPolicyResponse();
     }
 
     let pathname = url.pathname;

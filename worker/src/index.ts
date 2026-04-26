@@ -279,18 +279,24 @@ export default {
         name?: string;
         address?: Record<string, string>;
       }>;
-      const results = raw.map((r) => {
-        const a = r.address ?? {};
-        const area = a.suburb || a.neighbourhood || a.city_district || a.quarter || a.town || '';
-        const primary = r.name || r.display_name.split(',')[0].trim();
-        return {
-          lat: parseFloat(r.lat),
-          lng: parseFloat(r.lon),
-          label: r.display_name,
-          primary,
-          area,
-        };
-      });
+      const results = raw
+        .filter((r) => {
+          const a = r.address ?? {};
+          const city = a.city || a.town || a.municipality || '';
+          return city === 'Rio de Janeiro';
+        })
+        .map((r) => {
+          const a = r.address ?? {};
+          const area = a.suburb || a.neighbourhood || a.city_district || a.quarter || a.town || '';
+          const primary = r.name || r.display_name.split(',')[0].trim();
+          return {
+            lat: parseFloat(r.lat),
+            lng: parseFloat(r.lon),
+            label: r.display_name,
+            primary,
+            area,
+          };
+        });
       const res = new Response(JSON.stringify(results), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',

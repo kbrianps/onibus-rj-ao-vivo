@@ -28,14 +28,18 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: Install worker deps (for type-check)
+        working-directory: worker
+        run: npm ci
+
+      - name: Type-check worker
+        working-directory: worker
+        run: npx tsc --noEmit
+
       - name: Build frontend
         run: npm run build
         env:
           PUBLIC_BASE: /tools/onibus-rj-ao-vivo/
-
-      - name: Install worker deps
-        working-directory: worker
-        run: npm ci
 
       - name: Deploy worker (frontend assets bundled)
         uses: cloudflare/wrangler-action@v3

@@ -212,7 +212,11 @@ ui.onSearchInput(async (q) => {
 
 ui.onPickPlace((place) => {
   manualPos = { lat: place.lat, lng: place.lng };
-  saveLastLocation({ lat: place.lat, lng: place.lng, label: place.label });
+  const primary = place.primary ?? place.label.split(',')[0].trim();
+  const area = place.area ?? '';
+  const shortLabel = area && area !== primary ? `${primary}, ${area}` : primary;
+  saveLastLocation({ lat: place.lat, lng: place.lng, label: shortLabel });
+  ui.setSearchValue(shortLabel);
   map.setUser(place.lat, place.lng);
   map.map.flyTo([place.lat, place.lng], 15, { duration: 0.6 });
 });

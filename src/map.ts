@@ -13,13 +13,13 @@ export interface BusWithHeading extends Bus {
 }
 
 export interface MapHandle {
-  map: L.Map;
   setUser: (lat: number, lng: number) => void;
   setBuses: (buses: BusWithHeading[]) => void;
   clearBuses: () => void;
   setRoute: (shapes: number[][][] | null) => void;
   recenter: () => void;
   fitToBuses: (buses: BusWithHeading[]) => void;
+  flyTo: (lat: number, lng: number, zoom?: number) => void;
   onClick: (cb: (lat: number, lng: number) => void) => void;
 }
 
@@ -167,7 +167,6 @@ export function initMap(containerId: string): MapHandle {
 
 
   return {
-    map,
     setUser(lat, lng) {
       const ll: L.LatLngTuple = [lat, lng];
       if (!userMarker) {
@@ -241,6 +240,9 @@ export function initMap(containerId: string): MapHandle {
         ],
       );
       map.fitBounds(safe.isValid() ? safe : RIO_BOUNDS, { padding: [60, 60], maxZoom: 15, animate: true });
+    },
+    flyTo(lat, lng, zoom) {
+      map.flyTo([lat, lng], zoom ?? map.getZoom(), { duration: 0.6 });
     },
     onClick(cb) {
       map.on('click', (e) => cb(e.latlng.lat, e.latlng.lng));

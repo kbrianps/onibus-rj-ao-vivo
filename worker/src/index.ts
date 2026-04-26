@@ -1,6 +1,6 @@
 import routesData from '../data/routes.json';
 
-const ROUTES = routesData as Record<string, number[][][]>;
+const ROUTES = routesData as Record<string, string[]>;
 
 interface RawBus {
   ordem: string;

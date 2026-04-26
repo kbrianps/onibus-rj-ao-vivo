@@ -12,7 +12,8 @@ Process:
   2. Maps trip_short_name (= SPPO line, e.g. "104") to its set of shape_ids.
   3. Reconstructs each shape as an ordered list of [lat, lng] points.
   4. Simplifies each polyline with Ramer-Douglas-Peucker (~15m tolerance).
-  5. Writes the result as compact JSON.
+  5. Encodes each polyline using Google's polyline algorithm (~80% smaller than JSON).
+  6. Writes the result as compact JSON: { "104": ["encoded1", "encoded2"], ... }
 """
 
 import csv
@@ -55,6 +56,34 @@ def rdp(points, epsilon):
     return [points[0], points[-1]]
 
 
+def _encode_signed(value):
+    """Google polyline integer encoding."""
+    value = value << 1
+    if value < 0:
+        value = ~value
+    chunks = []
+    while value >= 0x20:
+        chunks.append(chr((0x20 | (value & 0x1F)) + 63))
+        value >>= 5
+    chunks.append(chr(value + 63))
+    return "".join(chunks)
+
+
+def encode_polyline(points):
+    """Encode a list of (lat, lng) tuples into a Google polyline string."""
+    out = []
+    prev_lat = 0
+    prev_lng = 0
+    for lat, lng in points:
+        lat_i = round(lat * 1e5)
+        lng_i = round(lng * 1e5)
+        out.append(_encode_signed(lat_i - prev_lat))
+        out.append(_encode_signed(lng_i - prev_lng))
+        prev_lat = lat_i
+        prev_lng = lng_i
+    return "".join(out)
+
+
 def main(trips_path, shapes_path, output_path):
     line_shapes = defaultdict(set)
     with open(trips_path, encoding="utf-8") as f:
@@ -75,22 +104,23 @@ def main(trips_path, shapes_path, output_path):
 
     for sid in shape_points:
         shape_points[sid].sort()
-        shape_points[sid] = [[p[1], p[2]] for p in shape_points[sid]]
+        shape_points[sid] = [(p[1], p[2]) for p in shape_points[sid]]
 
     output = {}
-    total_before, total_after = 0, 0
+    total_before = 0
+    total_after = 0
     for line, sids in line_shapes.items():
-        polylines = []
+        encoded_shapes = []
         for sid in sids:
             if sid in shape_points:
                 pts = shape_points[sid]
                 total_before += len(pts)
                 simp = rdp(pts, EPS)
-                simp = [[round(p[0], PRECISION), round(p[1], PRECISION)] for p in simp]
+                simp = [(round(p[0], PRECISION), round(p[1], PRECISION)) for p in simp]
                 total_after += len(simp)
-                polylines.append(simp)
-        if polylines:
-            output[line] = polylines
+                encoded_shapes.append(encode_polyline(simp))
+        if encoded_shapes:
+            output[line] = encoded_shapes
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -99,7 +129,7 @@ def main(trips_path, shapes_path, output_path):
     size_mb = os.path.getsize(output_path) / 1024 / 1024
     reduction = 100 * (1 - total_after / total_before) if total_before else 0
     print(f"lines: {len(output)}")
-    print(f"points: {total_before} -> {total_after} ({reduction:.1f}% reduction)")
+    print(f"points: {total_before} -> {total_after} ({reduction:.1f}% RDP reduction)")
     print(f"output: {output_path} ({size_mb:.2f} MB)")
 
 

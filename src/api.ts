@@ -27,14 +27,25 @@ export async function fetchLines(signal?: AbortSignal): Promise<string[]> {
   return res.json();
 }
 
+import { decodePolyline } from './polyline';
+
 export interface RouteShapes {
   line: string;
   shapes: number[][][];
+}
+
+interface RawRouteResponse {
+  line: string;
+  shapes: string[];
 }
 
 export async function fetchRoute(line: string, signal?: AbortSignal): Promise<RouteShapes | null> {
   const res = await fetch(`${BASE}/route?line=${encodeURIComponent(line)}`, { signal });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const raw = (await res.json()) as RawRouteResponse;
+  return {
+    line: raw.line,
+    shapes: raw.shapes.map((s) => decodePolyline(s)),
+  };
 }

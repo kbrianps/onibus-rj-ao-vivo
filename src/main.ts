@@ -257,7 +257,11 @@ document.addEventListener('visibilitychange', () => {
   const saved = loadLastLocation();
   if (saved) {
     manualPos = { lat: saved.lat, lng: saved.lng };
-    if (saved.label) ui.setSearchValue(saved.label);
+    if (saved.label) {
+      const parts = saved.label.split(',').map((s) => s.trim()).filter(Boolean);
+      const short = parts.length > 2 ? `${parts[0]}, ${parts[1]}` : saved.label;
+      ui.setSearchValue(short);
+    }
     map.setUser(saved.lat, saved.lng);
     map.recenter();
   } else {

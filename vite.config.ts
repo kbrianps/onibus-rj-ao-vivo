@@ -57,7 +57,23 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'carto-tiles',
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            },
+          },
+          {
+            urlPattern: /\/api\/lines$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'sppo-lines',
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 },
+            },
+          },
+          {
+            urlPattern: /\/api\/route\?.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sppo-routes',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
           {

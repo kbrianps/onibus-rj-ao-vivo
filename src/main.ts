@@ -24,12 +24,17 @@ let abortCtrl: AbortController | null = null;
 let isFirstFetch = false;
 
 const lastBy = new Map<string, { lat: number; lng: number; heading: number | null }>();
+const snapCache = new Map<string, { distM: number; bearing: number } | null>();
+const SNAP_CACHE_MAX = 200;
 
 function snapToRoute(
   lat: number,
   lng: number,
   shapes: number[][][],
 ): { distM: number; bearing: number } | null {
+  const key = `${lat.toFixed(5)}|${lng.toFixed(5)}`;
+  if (snapCache.has(key)) return snapCache.get(key) ?? null;
+
   let best: { distM: number; bearing: number } | null = null;
   for (const shape of shapes) {
     for (let i = 0; i < shape.length - 1; i++) {
@@ -52,6 +57,11 @@ function snapToRoute(
       }
     }
   }
+  if (snapCache.size >= SNAP_CACHE_MAX) {
+    const firstKey = snapCache.keys().next().value;
+    if (firstKey !== undefined) snapCache.delete(firstKey);
+  }
+  snapCache.set(key, best);
   return best;
 }
 
@@ -126,6 +136,7 @@ async function startPolling(line: string) {
   currentLine = line;
   isFirstFetch = true;
   lastBy.clear();
+  snapCache.clear();
   currentRoute = null;
   ui.setLineValue(line);
   ui.setSubmitState('loading');

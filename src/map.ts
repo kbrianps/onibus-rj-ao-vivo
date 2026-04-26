@@ -41,7 +41,7 @@ export function initMap(containerId: string): MapHandle {
       maxZoom: 19,
       subdomains: 'abcd',
       attribution: '&copy; OpenStreetMap &copy; CARTO',
-      keepBuffer: 6,
+      keepBuffer: 4,
       updateWhenIdle: false,
       updateWhenZooming: false,
     },

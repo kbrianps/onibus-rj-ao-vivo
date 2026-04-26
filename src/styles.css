@@ -59,9 +59,10 @@ body {
   display: flex;
   align-items: center;
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 0.25rem 0.25rem 0.25rem 0.85rem;
+  overflow: hidden;
+  padding: 0.3rem;
   gap: 0.3rem;
 }
 
@@ -73,7 +74,7 @@ body {
   color: var(--text);
   font-size: 0.92rem;
   outline: none;
-  padding: 0.55rem 0;
+  padding: 0.7rem 0.85rem;
 }
 
 #search-input::placeholder {
@@ -85,8 +86,8 @@ body {
 }
 
 #search-status {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   border: none;
   background: var(--accent);
@@ -94,7 +95,7 @@ body {
   display: grid;
   place-items: center;
   cursor: pointer;
-  border-radius: 9px;
+  border-radius: 11px;
 }
 
 #search-status:hover {
@@ -216,7 +217,7 @@ body {
   align-items: center;
   background: var(--surface);
   border-radius: 14px;
-  box-shadow: var(--shadow-strong);
+  box-shadow: var(--shadow);
   overflow: hidden;
   padding: 0.3rem;
   gap: 0.3rem;

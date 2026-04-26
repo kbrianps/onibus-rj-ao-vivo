@@ -279,6 +279,7 @@ export default {
         name?: string;
         address?: Record<string, string>;
       }>;
+      const seen = new Set<string>();
       const results = raw
         .filter((r) => {
           const a = r.address ?? {};
@@ -296,6 +297,12 @@ export default {
             primary,
             area,
           };
+        })
+        .filter((r) => {
+          const key = `${r.primary.toLowerCase()}|${r.area.toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         });
       const res = new Response(JSON.stringify(results), {
         headers: {

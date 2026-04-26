@@ -1,6 +1,7 @@
 node_modules
 dist
 .wrangler
+worker/data/
 .dev.vars
 .env*
 .DS_Store

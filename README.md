@@ -132,8 +132,10 @@ cd /tmp && unzip -o gtfs-rio.zip routes.txt trips.txt shapes.txt
 # Ver script em https://github.com/kbrianps/onibus-rj-ao-vivo/blob/main/scripts/build-routes.py
 # (gera worker/data/routes.json)
 
-# 4. Re-deploy do worker
-cd worker && npx wrangler deploy
+# 4. Upload pro R2 + re-deploy
+cd worker
+npx wrangler r2 object put onibus-rj-routes/routes.json --file=data/routes.json --content-type=application/json --remote
+npx wrangler deploy
 ```
 
 ### Limitações conhecidas
@@ -321,8 +323,10 @@ cd /tmp && unzip -o gtfs-rio.zip routes.txt trips.txt shapes.txt
 # See scripts/build-routes.py
 # (generates worker/data/routes.json)
 
-# 4. Redeploy worker
-cd worker && npx wrangler deploy
+# 4. Upload to R2 + redeploy
+cd worker
+npx wrangler r2 object put onibus-rj-routes/routes.json --file=data/routes.json --content-type=application/json --remote
+npx wrangler deploy
 ```
 
 ### Known limitations

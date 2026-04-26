@@ -1,7 +1,3 @@
-import routesData from '../data/routes.json';
-
-const ROUTES = routesData as Record<string, string[]>;
-
 interface RawBus {
   ordem: string;
   latitude: string;
@@ -144,6 +140,17 @@ interface Env {
   ASSETS: { fetch(req: Request): Promise<Response> };
   ALLOWED_ORIGINS?: string;
   RATE_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  ROUTES: R2Bucket;
+}
+
+let routesCache: Record<string, string[]> | null = null;
+
+async function getRoutes(env: Env): Promise<Record<string, string[]>> {
+  if (routesCache) return routesCache;
+  const obj = await env.ROUTES.get('routes.json');
+  if (!obj) throw new Error('routes.json not found in R2');
+  routesCache = (await obj.json()) as Record<string, string[]>;
+  return routesCache;
 }
 
 const PATH_PREFIX = '/tools/onibus-rj-ao-vivo';
@@ -193,15 +200,21 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (pathname === '/route') {
       const line = url.searchParams.get('line')?.trim().toUpperCase();
       if (!line) return jsonResponse({ error: 'line required' }, request, env, 400);
-      const shapes = ROUTES[line];
+      const cacheKey = new Request(`https://onibus-rj-cache/route?line=${line}`);
+      const cached = await caches.default.match(cacheKey);
+      if (cached) return cached;
+      const routes = await getRoutes(env);
+      const shapes = routes[line];
       if (!shapes) return jsonResponse({ error: 'route not found' }, request, env, 404);
-      return new Response(JSON.stringify({ line, shapes }), {
+      const res = new Response(JSON.stringify({ line, shapes }), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'public, max-age=604800',
           ...corsHeaders(request, env),
         },
       });
+      ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
+      return res;
     }
 
     if (pathname === '/lines') {
@@ -365,7 +378,7 @@ export default {
     try {
       return await handle(request, env, ctx);
     } catch (err) {
-      console.error('worker error', err);
+      console.error('worker error:', err instanceof Error ? `${err.message}\n${err.stack}` : err);
       return jsonResponse({ error: 'internal error' }, request, env, 500);
     }
   },

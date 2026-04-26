@@ -14,5 +14,5 @@
     "noEmit": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src", "data"]
+  "include": ["src"]
 }

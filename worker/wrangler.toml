@@ -35,7 +35,7 @@ crons = ["* * * * *"]
 name = "RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1001"
-simple = { limit = 30, period = 60 }
+simple = { limit = 45, period = 60 }
 
 [dev]
 port = 8787

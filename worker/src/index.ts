@@ -27,12 +27,37 @@ const SOURCE = 'https://dados.mobilidade.rio/gps/sppo';
 const SNAPSHOT_TTL_S = 15;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age': '86400',
-};
+const ALLOWED_ORIGINS = new Set([
+  'https://kbrianps.com',
+  'https://www.kbrianps.com',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
+
+function isAllowedOrigin(request: Request): boolean {
+  const origin = request.headers.get('Origin');
+  if (origin && ALLOWED_ORIGINS.has(origin)) return true;
+  const referer = request.headers.get('Referer');
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      if (ALLOWED_ORIGINS.has(`${u.protocol}//${u.host}`)) return true;
+    } catch {}
+  }
+  return false;
+}
+
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('Origin');
+  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    Vary: 'Origin',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+  };
+}
 
 function parseBus(r: RawBus): Bus | null {
   const lat = parseFloat(r.latitude.replace(',', '.'));
@@ -93,13 +118,13 @@ async function loadSnapshot(ctx: ExecutionContext): Promise<Bus[]> {
   return buses;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, request: Request, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': `public, max-age=${Math.min(SNAPSHOT_TTL_S, 10)}`,
-      ...CORS_HEADERS,
+      ...corsHeaders(request),
     },
   });
 }
@@ -114,7 +139,7 @@ const API_PREFIX = '/api';
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
     const url = new URL(request.url);
     let pathname = url.pathname;
@@ -128,19 +153,25 @@ export default {
       assetUrl.pathname = pathname;
       return env.ASSETS.fetch(new Request(assetUrl, request));
     }
+
     if (pathname === '/' || pathname === '/health') {
-      return jsonResponse({ ok: true, service: 'onibus-rj-ao-vivo-proxy' });
+      return jsonResponse({ ok: true, service: 'onibus-rj-ao-vivo-proxy' }, request);
     }
+
+    if (!isAllowedOrigin(request)) {
+      return jsonResponse({ error: 'forbidden' }, request, 403);
+    }
+
     if (pathname === '/route') {
       const line = url.searchParams.get('line')?.trim().toUpperCase();
-      if (!line) return jsonResponse({ error: 'line required' }, 400);
+      if (!line) return jsonResponse({ error: 'line required' }, request, 400);
       const shapes = ROUTES[line];
-      if (!shapes) return jsonResponse({ error: 'route not found' }, 404);
+      if (!shapes) return jsonResponse({ error: 'route not found' }, request, 404);
       return new Response(JSON.stringify({ line, shapes }), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'public, max-age=604800',
-          ...CORS_HEADERS,
+          ...corsHeaders(request),
         },
       });
     }
@@ -150,7 +181,7 @@ export default {
       try {
         snapshot = await loadSnapshot(ctx);
       } catch (err) {
-        return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, 502);
+        return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, 502);
       }
       const set = new Set<string>();
       for (const b of snapshot) if (b.line) set.add(b.line);
@@ -164,14 +195,14 @@ export default {
         if (bIsNum) return 1;
         return a.localeCompare(b);
       });
-      return jsonResponse(lines);
+      return jsonResponse(lines, request);
     }
 
     if (pathname === '/reverse') {
       const lat = parseFloat(url.searchParams.get('lat') || '');
       const lng = parseFloat(url.searchParams.get('lng') || '');
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return jsonResponse({ error: 'lat/lng required' }, 400);
+        return jsonResponse({ error: 'lat/lng required' }, request, 400);
       }
       const cacheKey = new Request(
         `https://onibus-rj-cache/reverse?lat=${lat.toFixed(4)}&lng=${lng.toFixed(4)}`,
@@ -187,7 +218,7 @@ export default {
           },
         },
       );
-      if (!upstream.ok) return jsonResponse({ error: 'reverse upstream error' }, 502);
+      if (!upstream.ok) return jsonResponse({ error: 'reverse upstream error' }, request, 502);
       const raw = (await upstream.json()) as {
         lat: string;
         lon: string;
@@ -209,7 +240,7 @@ export default {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'public, max-age=86400',
-          ...CORS_HEADERS,
+          ...corsHeaders(request),
         },
       });
       ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
@@ -218,7 +249,7 @@ export default {
 
     if (pathname === '/geocode') {
       const q = url.searchParams.get('q')?.trim();
-      if (!q || q.length < 2) return jsonResponse({ error: 'q required' }, 400);
+      if (!q || q.length < 2) return jsonResponse({ error: 'q required' }, request, 400);
       const cacheKey = new Request(`https://onibus-rj-cache/geocode?q=${encodeURIComponent(q.toLowerCase())}`);
       const cached = await caches.default.match(cacheKey);
       if (cached) return cached;
@@ -226,7 +257,7 @@ export default {
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Rio de Janeiro, Brasil')}&format=json&limit=8&accept-language=pt-BR&viewbox=-43.8,-22.7,-43.0,-23.1&bounded=1&addressdetails=1`,
         { headers: { 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1 (https://github.com/kbrianps)', Accept: 'application/json' } },
       );
-      if (!upstream.ok) return jsonResponse({ error: 'geocode upstream error' }, 502);
+      if (!upstream.ok) return jsonResponse({ error: 'geocode upstream error' }, request, 502);
       const raw = (await upstream.json()) as Array<{
         lat: string;
         lon: string;
@@ -250,7 +281,7 @@ export default {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'public, max-age=86400',
-          ...CORS_HEADERS,
+          ...corsHeaders(request),
         },
       });
       ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
@@ -258,21 +289,21 @@ export default {
     }
 
     if (pathname !== '/sppo') {
-      return jsonResponse({ error: 'not found' }, 404);
+      return jsonResponse({ error: 'not found' }, request, 404);
     }
 
     const line = url.searchParams.get('line')?.trim().toUpperCase() || null;
     const bbox = parseBbox(url.searchParams.get('bbox'));
 
     if (!line && !bbox) {
-      return jsonResponse({ error: 'line or bbox required' }, 400);
+      return jsonResponse({ error: 'line or bbox required' }, request, 400);
     }
 
     let snapshot: Bus[];
     try {
       snapshot = await loadSnapshot(ctx);
     } catch (err) {
-      return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, 502);
+      return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, 502);
     }
 
     const result: Bus[] = [];
@@ -285,6 +316,6 @@ export default {
       result.push(b);
     }
 
-    return jsonResponse(result);
+    return jsonResponse(result, request);
   },
 };

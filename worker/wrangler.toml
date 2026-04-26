@@ -71,4 +71,18 @@ bucket_name = "onibus-rj-routes"
 port = 8787
 
 [env.dev.vars]
+CANONICAL_BASE = "https://kbrianps.com"
+APP_PATH = "/tools/onibus-rj-ao-vivo"
 ALLOWED_ORIGINS = "https://kbrianps.com,https://www.kbrianps.com,http://localhost:5173,http://127.0.0.1:5173"
+TWA_PACKAGE_NAME = "com.kbrianps.onibusrjaovivo"
+TWA_FINGERPRINTS = "3D:55:0E:DA:0B:16:3C:0F:1F:74:0D:AE:3E:3E:25:91:F6:D3:C5:1C:07:50:93:9D:2D:79:5C:A3:E0:98:61:19"
+
+[[env.dev.r2_buckets]]
+binding = "ROUTES"
+bucket_name = "onibus-rj-routes"
+
+[[env.dev.unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 45, period = 60 }

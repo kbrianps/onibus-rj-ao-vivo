@@ -21,6 +21,7 @@ interface Bus {
 
 const SOURCE = 'https://dados.mobilidade.rio/gps/sppo';
 const SNAPSHOT_TTL_S = 80;
+const SNAPSHOT_REFRESH_INTERVAL_MS = 60_000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_CACHE_KEY = new Request('https://onibus-rj-cache/snapshot', { method: 'GET' });
 const UA_RE = /(Mozilla|Chrome|Safari|Firefox|Edge|Opera|OPR|SamsungBrowser|UCBrowser|Vivaldi)/i;
@@ -62,6 +63,7 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
     Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Expose-Headers': 'X-Snapshot-Refreshed-At, X-Snapshot-Refresh-Interval-Ms',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -94,7 +96,12 @@ function parseBbox(s: string | null): [number, number, number, number] | null {
   return [minLat, minLng, maxLat, maxLng];
 }
 
-async function refreshSnapshot(): Promise<Bus[]> {
+interface Snapshot {
+  buses: Bus[];
+  refreshedAt: number;
+}
+
+async function refreshSnapshot(): Promise<Snapshot> {
   const res = await fetch(SOURCE, {
     headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
     cf: { cacheTtl: SNAPSHOT_TTL_S, cacheEverything: true },
@@ -109,19 +116,24 @@ async function refreshSnapshot(): Promise<Bus[]> {
     if (!prev || b.timestamp > prev.timestamp) latest.set(b.vehicleId, b);
   }
   const buses = Array.from(latest.values());
+  const refreshedAt = Date.now();
   const stored = new Response(JSON.stringify(buses), {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
+      'X-Snapshot-Refreshed-At': String(refreshedAt),
     },
   });
   await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
-  return buses;
+  return { buses, refreshedAt };
 }
 
-async function loadSnapshot(): Promise<Bus[]> {
+async function loadSnapshot(): Promise<Snapshot> {
   const hit = await caches.default.match(SNAPSHOT_CACHE_KEY);
-  if (hit) return hit.json<Bus[]>();
+  if (hit) {
+    const refreshedAt = Number(hit.headers.get('X-Snapshot-Refreshed-At')) || Date.now();
+    return { buses: await hit.json<Bus[]>(), refreshedAt };
+  }
   return refreshSnapshot();
 }
 
@@ -365,14 +377,14 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
 
     if (pathname === '/lines') {
-      let snapshot: Bus[];
+      let snap: Snapshot;
       try {
-        snapshot = await loadSnapshot();
+        snap = await loadSnapshot();
       } catch (err) {
         return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
       }
       const set = new Set<string>();
-      for (const b of snapshot) if (b.line) set.add(b.line);
+      for (const b of snap.buses) if (b.line) set.add(b.line);
       const lines = Array.from(set).sort((a, b) => {
         const na = Number(a);
         const nb = Number(b);
@@ -506,15 +518,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return jsonResponse({ error: 'line or bbox required' }, request, env, 400);
     }
 
-    let snapshot: Bus[];
+    let snap: Snapshot;
     try {
-      snapshot = await loadSnapshot();
+      snap = await loadSnapshot();
     } catch (err) {
       return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
     }
 
     const result: Bus[] = [];
-    for (const b of snapshot) {
+    for (const b of snap.buses) {
       if (line && b.line !== line) continue;
       if (bbox) {
         const [minLat, minLng, maxLat, maxLng] = bbox;
@@ -523,7 +535,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       result.push(b);
     }
 
-    return jsonResponse(result, request, env);
+    const res = jsonResponse(result, request, env);
+    res.headers.set('X-Snapshot-Refreshed-At', String(snap.refreshedAt));
+    res.headers.set('X-Snapshot-Refresh-Interval-Ms', String(SNAPSHOT_REFRESH_INTERVAL_MS));
+    return res;
 }
 
 export default {

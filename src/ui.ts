@@ -14,6 +14,8 @@ export interface UIHandle {
   setSearchState: (state: SubmitState) => void;
   setSearchValue: (value: string) => void;
   setLineValue: (line: string) => void;
+  setPollNextAt: (tsMs: number | null) => void;
+  setPollLoading: (loading: boolean) => void;
 }
 
 const SUBMIT_ICONS: Record<SubmitState, string> = {
@@ -31,9 +33,43 @@ export function initUI(): UIHandle {
   const searchInput = document.getElementById('search-input') as HTMLInputElement;
   const searchStatusBtn = document.getElementById('search-status') as HTMLButtonElement;
   const searchResults = document.getElementById('search-results') as HTMLUListElement;
+  const pollStatus = document.getElementById('poll-status') as HTMLDivElement;
+  const pollStatusText = document.getElementById('poll-status-text') as HTMLSpanElement;
 
   let pickPlaceCb: ((p: Place) => void) | null = null;
   let pickLineCb: ((line: string) => void) | null = null;
+  const POLL_LOADING_MIN_MS = 500;
+  let pollNextAt: number | null = null;
+  let pollLoading = false;
+  let pollLoadingStartedAt = 0;
+  let pollLoadingClearTimer: number | null = null;
+  let pollTickHandle: number | null = null;
+
+  function renderPollStatus() {
+    pollStatus.hidden = false;
+    if (pollLoading) {
+      pollStatus.dataset.state = 'loading';
+      pollStatusText.textContent = 'Atualizando…';
+      return;
+    }
+    if (pollNextAt === null) {
+      pollStatus.dataset.state = 'empty';
+      pollStatusText.textContent = 'Selecione uma linha de ônibus';
+      return;
+    }
+    pollStatus.dataset.state = 'idle';
+    const remaining = Math.max(0, Math.ceil((pollNextAt - Date.now()) / 1000));
+    pollStatusText.textContent =
+      remaining === 0 ? 'Atualizando em instantes…' : `Próxima atualização em ${remaining}s`;
+  }
+
+  function ensurePollTick() {
+    if (pollTickHandle !== null) return;
+    pollTickHandle = window.setInterval(() => {
+      if (pollLoading || pollNextAt === null) return;
+      renderPollStatus();
+    }, 500);
+  }
 
   searchForm.addEventListener('submit', (e) => e.preventDefault());
 
@@ -150,6 +186,37 @@ export function initUI(): UIHandle {
     },
     setLineValue(line) {
       input.value = line;
+    },
+    setPollNextAt(tsMs) {
+      pollNextAt = tsMs;
+      ensurePollTick();
+      renderPollStatus();
+    },
+    setPollLoading(loading) {
+      ensurePollTick();
+      if (loading) {
+        if (pollLoadingClearTimer !== null) {
+          clearTimeout(pollLoadingClearTimer);
+          pollLoadingClearTimer = null;
+        }
+        pollLoading = true;
+        pollLoadingStartedAt = Date.now();
+        renderPollStatus();
+        return;
+      }
+      const elapsed = Date.now() - pollLoadingStartedAt;
+      const wait = Math.max(0, POLL_LOADING_MIN_MS - elapsed);
+      if (wait === 0) {
+        pollLoading = false;
+        renderPollStatus();
+        return;
+      }
+      if (pollLoadingClearTimer !== null) clearTimeout(pollLoadingClearTimer);
+      pollLoadingClearTimer = window.setTimeout(() => {
+        pollLoading = false;
+        pollLoadingClearTimer = null;
+        renderPollStatus();
+      }, wait);
     },
   };
 }

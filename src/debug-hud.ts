@@ -1,4 +1,4 @@
-import { debugState } from './debug';
+import { debugState, logDebugError } from './debug';
 
 function endpointKey(url: string): string {
   try {
@@ -30,12 +30,6 @@ function trackFetch(url: string, ms: number, status: number, bytes: number): voi
   s.lastBytes = bytes;
   if (status >= 400 || status === 0) s.errors += 1;
   debugState.endpoints[k] = s;
-}
-
-function logError(msg: string): void {
-  debugState.errors.unshift({ ts: Date.now(), msg: msg.slice(0, 200) });
-  if (debugState.errors.length > 10) debugState.errors.length = 10;
-  debugState.consoleErrors += 1;
 }
 
 function fmtBytes(b: number): string {
@@ -156,9 +150,6 @@ function renderPanel(): void {
 }
 
 export function initDebugHud(): void {
-  debugState.enabled = true;
-  try { localStorage.setItem('onibus-rj:debug', '1'); } catch {}
-
   const origFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -174,17 +165,10 @@ export function initDebugHud(): void {
     } catch (err) {
       const ms = performance.now() - t0;
       trackFetch(url, ms, 0, 0);
+      logDebugError(`fetch failed: ${(err as Error).message} (${url})`);
       throw err;
     }
   };
-
-  const origErr = console.error.bind(console);
-  console.error = (...args: unknown[]) => {
-    logError(args.map((a) => (a instanceof Error ? a.message : String(a))).join(' '));
-    origErr(...args);
-  };
-  window.addEventListener('error', (e) => logError(`${e.message} @ ${e.filename}:${e.lineno}`));
-  window.addEventListener('unhandledrejection', (e) => logError(`unhandled: ${e.reason}`));
 
   let frames = 0;
   let lastFpsT = performance.now();

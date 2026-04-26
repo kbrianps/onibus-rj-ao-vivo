@@ -9,7 +9,13 @@ export interface FetchOpts {
   signal?: AbortSignal;
 }
 
-export async function fetchBuses(opts: FetchOpts): Promise<Bus[]> {
+export interface BusesResult {
+  buses: Bus[];
+  refreshedAt: number | null;
+  refreshIntervalMs: number | null;
+}
+
+export async function fetchBuses(opts: FetchOpts): Promise<BusesResult> {
   const params = new URLSearchParams();
   if (opts.line) params.set('line', opts.line);
   if (opts.bbox) params.set('bbox', bboxParam(opts.bbox));
@@ -18,7 +24,10 @@ export async function fetchBuses(opts: FetchOpts): Promise<Bus[]> {
   }
   const res = await fetch(`${BASE}/sppo?${params}`, { signal: opts.signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const refreshedAt = Number(res.headers.get('X-Snapshot-Refreshed-At')) || null;
+  const refreshIntervalMs = Number(res.headers.get('X-Snapshot-Refresh-Interval-Ms')) || null;
+  const buses = (await res.json()) as Bus[];
+  return { buses, refreshedAt, refreshIntervalMs };
 }
 
 export async function fetchLines(signal?: AbortSignal): Promise<string[]> {

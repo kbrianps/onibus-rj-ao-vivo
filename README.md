@@ -18,6 +18,7 @@ Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da S
 - **Quem precisa de algo rápido**: autocomplete de linha + cache do PWA fazem o app abrir em segundos e responder instantâneo nas visitas seguintes.
 - **Quem tem dificuldade com aplicativos**: interface enxuta — uma busca de endereço no topo, uma busca de linha embaixo, e o mapa. Sem menus, sem login, sem pop-up.
 - **Quem se irrita com anúncios**: zero anúncios. Concorrentes inserem ads em pop-up, banners e até áudio em momentos inoportunos (esperando o ônibus, com pouco sinal). Aqui o foco é o ônibus.
+- **Quem precisa saber o que está acontecendo**: indicador "Próxima atualização em Xs" com pulso "Atualizando…" quando a busca acontece. Sem ansiedade nem dúvida se o app travou.
 
 ### Stack
 
@@ -46,7 +47,7 @@ Web app mobile-first (PWA) que mostra a posição em tempo real dos ônibus da S
 ### Estrutura
 
 ```
-omnibus/
+onibus-rj-ao-vivo/
 ├── package.json              # frontend (vite, leaflet, vite-plugin-pwa)
 ├── vite.config.ts            # PWA + proxy /api -> :8787
 ├── index.html
@@ -225,6 +226,7 @@ Mobile-first PWA that shows real-time positions of buses operating in the city o
 - **You need it fast**: line autocomplete + PWA caching make the app load in seconds and feel instant on subsequent visits.
 - **You're not tech-savvy**: lean UI — one address search on top, one line search at the bottom, the map in between. No menus, no login, no pop-ups.
 - **You hate ads**: zero ads. Competing apps push ads in pop-ups, banners and even audio at the worst times (while waiting for the bus, on a flaky signal). Here the focus is the bus.
+- **You need to know what's happening**: a "Next update in Xs" indicator with a pulsing "Updating…" badge while a fetch is in flight. No anxiety, no wondering whether the app froze.
 
 ### Stack
 
@@ -253,7 +255,7 @@ Mobile-first PWA that shows real-time positions of buses operating in the city o
 ### Project layout
 
 ```
-omnibus/
+onibus-rj-ao-vivo/
 ├── package.json              # frontend (vite, leaflet, vite-plugin-pwa)
 ├── vite.config.ts            # PWA + proxy /api -> :8787
 ├── index.html

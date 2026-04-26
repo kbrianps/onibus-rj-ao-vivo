@@ -6,16 +6,17 @@ import { searchPlaces, reverseGeocode } from './geocode';
 import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
 import { getCurrentPosition, watchPosition } from './geo';
 import { bearingDeg, type Bus } from './types';
-import { isDebugEnabled, trackSnap } from './debug';
+import { isDebugEnabled, trackSnap, installEarlyDebugCapture } from './debug';
 
 if (isDebugEnabled()) {
+  installEarlyDebugCapture();
   void import('./debug-hud').then((m) => m.initDebugHud());
 }
 
-const SPPO_REFRESH_MS = 20_000;
-const POLL_MIN_MS = 5_000;
-const POLL_MAX_MS = 20_000;
-const POLL_BUFFER_MS = 2_000;
+const POLL_MIN_MS = 15_000;
+const POLL_MAX_MS = 60_000;
+const POLL_BUFFER_MS = 1_000;
+const POLL_FALLBACK_INTERVAL_MS = 60_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 2 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
@@ -116,18 +117,18 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
 
 let submitStateTimer: number | null = null;
 
-function nextPollDelay(buses: BusWithHeading[]): number {
-  if (!buses.length) return POLL_MAX_MS;
-  let newest = 0;
-  for (const b of buses) if (b.serverTimestamp > newest) newest = b.serverTimestamp;
-  const ageMs = Date.now() - newest;
-  const delay = SPPO_REFRESH_MS - ageMs + POLL_BUFFER_MS;
+function nextPollDelay(refreshedAt: number | null, intervalMs: number | null): number {
+  if (refreshedAt === null) return POLL_MAX_MS;
+  const interval = intervalMs ?? POLL_FALLBACK_INTERVAL_MS;
+  const nextRefreshAt = refreshedAt + interval;
+  const delay = nextRefreshAt - Date.now() + POLL_BUFFER_MS;
   return Math.max(POLL_MIN_MS, Math.min(POLL_MAX_MS, delay));
 }
 
 function schedulePoll(ms: number) {
   if (pollTimer) clearTimeout(pollTimer);
   pollTimer = window.setTimeout(tick, ms);
+  ui.setPollNextAt(Date.now() + ms);
 }
 
 async function tick() {
@@ -138,9 +139,10 @@ async function tick() {
   }
   abortCtrl?.abort();
   abortCtrl = new AbortController();
+  ui.setPollLoading(true);
   try {
-    const raw = await fetchBuses({ line: currentLine, signal: abortCtrl.signal });
-    const buses = withHeadings(raw);
+    const result = await fetchBuses({ line: currentLine, signal: abortCtrl.signal });
+    const buses = withHeadings(result.buses).filter((b) => !b.stale);
     map.setBuses(buses);
     if (isFirstFetch) {
       isFirstFetch = false;
@@ -149,7 +151,8 @@ async function tick() {
       if (submitStateTimer) clearTimeout(submitStateTimer);
       submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
     }
-    schedulePoll(nextPollDelay(buses));
+    ui.setPollLoading(false);
+    schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     if (isFirstFetch) {
@@ -157,6 +160,7 @@ async function tick() {
       ui.setSubmitState('idle');
     }
     console.error(err);
+    ui.setPollLoading(false);
     schedulePoll(POLL_MAX_MS);
   }
 }
@@ -314,6 +318,7 @@ document.addEventListener('visibilitychange', () => {
   });
 
   const last = loadLastLine();
-  if (last) startPolling(last);
+  if (last) ui.setLineValue(last);
+  ui.setPollNextAt(null);
   document.body.classList.add('ready');
 })();

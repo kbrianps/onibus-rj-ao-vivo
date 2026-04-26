@@ -2,15 +2,15 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const BASE = process.env.PUBLIC_BASE ?? '/tools/onibus-rj-ao-vivo/';
+const API_PREFIX = `${BASE.replace(/\/$/, '')}/api`;
 
 export default defineConfig({
   base: BASE,
   server: {
     proxy: {
-      '/api': {
+      [API_PREFIX]: {
         target: 'http://localhost:8787',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },

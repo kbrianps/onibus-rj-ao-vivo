@@ -6,6 +6,9 @@ import { searchPlaces, reverseGeocode } from './geocode';
 import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
 import { getCurrentPosition, watchPosition } from './geo';
 import { bearingDeg, type Bus } from './types';
+import { initDebug, isDebugEnabled, trackSnap } from './debug';
+
+if (isDebugEnabled()) initDebug();
 
 const POLL_MS = 15_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
@@ -35,6 +38,7 @@ function snapToRoute(
   const key = `${lat.toFixed(5)}|${lng.toFixed(5)}`;
   if (snapCache.has(key)) return snapCache.get(key) ?? null;
 
+  const t0 = performance.now();
   let best: { distM: number; bearing: number } | null = null;
   for (const shape of shapes) {
     for (let i = 0; i < shape.length - 1; i++) {
@@ -62,6 +66,7 @@ function snapToRoute(
     if (firstKey !== undefined) snapCache.delete(firstKey);
   }
   snapCache.set(key, best);
+  trackSnap(performance.now() - t0);
   return best;
 }
 

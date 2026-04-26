@@ -469,7 +469,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return new Response(body, {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': 'public, max-age=300, s-maxage=300',
+          'Cache-Control': 'public, max-age=0, s-maxage=300, must-revalidate',
           ...corsHeaders(request, env),
         },
       });

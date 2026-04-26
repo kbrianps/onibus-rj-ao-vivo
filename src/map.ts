@@ -2,6 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Bus } from './types';
 import rioBoundary from './rio-boundary.json';
+import { trackTile, isDebugEnabled } from './debug';
 
 const RIO: L.LatLngTuple = [-22.9083, -43.1964];
 const RIO_BOUNDS = L.latLngBounds([-23.085, -43.81], [-22.74, -43.09]);
@@ -26,6 +27,7 @@ export function initMap(containerId: string): MapHandle {
   const map = L.map(containerId, {
     zoomControl: false,
     preferCanvas: true,
+    renderer: L.canvas({ padding: 1 }),
     attributionControl: false,
     minZoom: 11,
     maxBounds: RIO_BOUNDS,
@@ -35,7 +37,7 @@ export function initMap(containerId: string): MapHandle {
   L.control.zoom({ position: 'bottomright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map);
   L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map);
 
-  L.tileLayer(
+  const tileLayer = L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     {
       maxZoom: 19,
@@ -46,6 +48,17 @@ export function initMap(containerId: string): MapHandle {
       updateWhenZooming: false,
     },
   ).addTo(map);
+
+  if (isDebugEnabled()) {
+    const tileStart = new WeakMap<HTMLImageElement, number>();
+    tileLayer.on('tileloadstart', (e: L.TileEvent) => {
+      tileStart.set(e.tile as HTMLImageElement, performance.now());
+    });
+    tileLayer.on('tileload', (e: L.TileEvent) => {
+      const t0 = tileStart.get(e.tile as HTMLImageElement);
+      if (t0) trackTile(performance.now() - t0);
+    });
+  }
 
   map.getContainer().addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -201,9 +214,9 @@ export function initMap(containerId: string): MapHandle {
       for (const shape of shapes) {
         const latlngs = shape.map(([lat, lng]) => [lat, lng] as L.LatLngTuple);
         L.polyline(latlngs, {
-          color: '#0ea5e9',
+          color: '#8b5cf6',
           weight: 4,
-          opacity: 0.55,
+          opacity: 0.6,
           interactive: false,
         }).addTo(routeLayer);
       }

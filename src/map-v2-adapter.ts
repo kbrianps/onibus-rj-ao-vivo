@@ -14,6 +14,8 @@ export interface MapHandle {
   recenter: () => void;
   fitToBuses: (buses: BusWithHeading[]) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
   onClick: (cb: (lat: number, lng: number) => void) => void;
 }
 
@@ -49,6 +51,12 @@ export function initMap(containerId: string): MapHandle {
     },
     flyTo(lat, lng, zoom) {
       inner.flyTo(lat, lng, zoom);
+    },
+    zoomIn() {
+      inner.zoomIn();
+    },
+    zoomOut() {
+      inner.zoomOut();
     },
     onClick(cb) {
       inner.on('click', cb);

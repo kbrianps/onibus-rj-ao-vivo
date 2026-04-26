@@ -197,10 +197,17 @@ body {
   color: var(--muted);
 }
 
-#recenter {
+#map-controls {
   position: fixed;
   right: 0.85rem;
   bottom: calc(var(--safe-bottom) + 12.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 1000;
+}
+
+#map-controls button {
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -210,12 +217,12 @@ body {
   display: grid;
   place-items: center;
   box-shadow: var(--shadow);
-  z-index: 1000;
   cursor: pointer;
+  padding: 0;
 }
 
-#recenter:active,
-#recenter:hover {
+#map-controls button:active,
+#map-controls button:hover {
   background: var(--surface-2);
 }
 
@@ -407,7 +414,7 @@ body {
     bottom: calc(var(--safe-bottom) + 1.25rem);
   }
 
-  #recenter {
+  #map-controls {
     right: 1rem;
     bottom: calc(var(--safe-bottom) + 7rem);
   }

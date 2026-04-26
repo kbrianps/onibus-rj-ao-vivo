@@ -20,6 +20,8 @@ export interface MapHandle {
   recenter: () => void;
   fitToBuses: (buses: BusWithHeading[]) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
   onClick: (cb: (lat: number, lng: number) => void) => void;
 }
 
@@ -34,7 +36,6 @@ export function initMap(containerId: string): MapHandle {
     maxBoundsViscosity: 1.0,
   }).setView(RIO, 11);
 
-  L.control.zoom({ position: 'bottomright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map);
   L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map);
 
   const tileLayer = L.tileLayer(
@@ -243,6 +244,12 @@ export function initMap(containerId: string): MapHandle {
     },
     flyTo(lat, lng, zoom) {
       map.flyTo([lat, lng], zoom ?? map.getZoom(), { duration: 0.6 });
+    },
+    zoomIn() {
+      map.zoomIn();
+    },
+    zoomOut() {
+      map.zoomOut();
     },
     onClick(cb) {
       map.on('click', (e) => cb(e.latlng.lat, e.latlng.lng));

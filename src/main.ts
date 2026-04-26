@@ -268,6 +268,9 @@ ui.onPickPlace((place) => {
   map.flyTo(place.lat, place.lng, 15);
 });
 
+document.getElementById('zoom-in')?.addEventListener('click', () => map.zoomIn());
+document.getElementById('zoom-out')?.addEventListener('click', () => map.zoomOut());
+
 let watchStarted = false;
 document.getElementById('recenter')?.addEventListener('click', async () => {
   try {

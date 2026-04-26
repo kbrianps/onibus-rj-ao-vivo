@@ -17,7 +17,7 @@
       #map { position: fixed; inset: 0; z-index: 0; background: #e2e8f0; }
       body:not(.ready) #topbar,
       body:not(.ready) #sheet,
-      body:not(.ready) #recenter,
+      body:not(.ready) #map-controls,
       body:not(.ready) .leaflet-control-container { visibility: hidden; }
     </style>
   </head>
@@ -39,9 +39,17 @@
       <span id="poll-status-text">Selecione uma linha de ônibus</span>
     </div>
 
-    <button id="recenter" type="button" title="Ir para meu local" aria-label="Ir para meu local">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-    </button>
+    <div id="map-controls">
+      <button id="zoom-in" type="button" title="Aproximar" aria-label="Aproximar">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button id="zoom-out" type="button" title="Afastar" aria-label="Afastar">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <button id="recenter" type="button" title="Ir para meu local" aria-label="Ir para meu local">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+    </div>
 
     <section id="sheet" aria-label="Selecionar linha">
       <ul id="line-suggestions" hidden role="listbox"></ul>

@@ -123,7 +123,7 @@ export function initMap(containerId: string): MapHandle {
   const busLayer = L.layerGroup().addTo(map);
   const markers = new Map<string, L.Marker>();
   const animations = new Map<string, number>();
-  const ANIM_DURATION = 1200;
+  const ANIM_DURATION = 800;
 
   function animateMarkerTo(vehicleId: string, marker: L.Marker, to: L.LatLng) {
     const prev = animations.get(vehicleId);

@@ -143,9 +143,23 @@ interface Env {
   ROUTES: R2Bucket;
   TWA_PACKAGE_NAME?: string;
   TWA_FINGERPRINTS?: string;
+  CANONICAL_BASE?: string;
+  APP_PATH?: string;
 }
 
-function privacyPolicyResponse(): Response {
+const DEFAULT_CANONICAL_BASE = 'https://kbrianps.com';
+const DEFAULT_APP_PATH = '/tools/onibus-rj-ao-vivo';
+
+function canonicalBase(env: Env): string {
+  return (env.CANONICAL_BASE ?? DEFAULT_CANONICAL_BASE).replace(/\/$/, '');
+}
+
+function appPath(env: Env): string {
+  return (env.APP_PATH ?? DEFAULT_APP_PATH).replace(/\/$/, '');
+}
+
+function privacyPolicyResponse(env: Env): Response {
+  const appUrl = `${canonicalBase(env)}${appPath(env)}/`;
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -171,7 +185,7 @@ function privacyPolicyResponse(): Response {
 </head>
 <body>
 <main>
-  <p class="nav"><a href="/tools/onibus-rj-ao-vivo/">← Voltar ao app</a></p>
+  <p class="nav"><a href="${appUrl}">← Voltar ao app</a></p>
 
   <h1>Política de Privacidade</h1>
   <p class="updated">Última atualização: 26 de abril de 2026</p>
@@ -268,7 +282,6 @@ async function getRoutes(env: Env): Promise<Record<string, string[]>> {
   return routesCache;
 }
 
-const PATH_PREFIX = '/tools/onibus-rj-ao-vivo';
 const API_PREFIX = '/api';
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -276,21 +289,28 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
     const url = new URL(request.url);
+    const appBase = canonicalBase(env);
+    const pathPrefix = appPath(env);
+    const shortPath = pathPrefix.split('/').pop() ?? '';
 
     if (url.pathname === '/.well-known/assetlinks.json') {
       return assetLinksResponse(env);
     }
 
+    if (shortPath && (url.pathname === `/${shortPath}` || url.pathname === `/${shortPath}/`)) {
+      return Response.redirect(`${appBase}${pathPrefix}/`, 301);
+    }
+
     if (
-      url.pathname === '/tools/onibus-rj-ao-vivo/privacidade' ||
-      url.pathname === '/tools/onibus-rj-ao-vivo/privacidade/'
+      url.pathname === `${pathPrefix}/privacidade` ||
+      url.pathname === `${pathPrefix}/privacidade/`
     ) {
-      return privacyPolicyResponse();
+      return privacyPolicyResponse(env);
     }
 
     let pathname = url.pathname;
-    if (pathname.startsWith(PATH_PREFIX)) {
-      pathname = pathname.slice(PATH_PREFIX.length) || '/';
+    if (pathname.startsWith(pathPrefix)) {
+      pathname = pathname.slice(pathPrefix.length) || '/';
     }
     if (pathname.startsWith(API_PREFIX)) {
       pathname = pathname.slice(API_PREFIX.length) || '/';

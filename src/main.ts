@@ -10,7 +10,7 @@ import { initDebug, isDebugEnabled, trackSnap } from './debug';
 
 if (isDebugEnabled()) initDebug();
 
-const POLL_MS = 15_000;
+const POLL_MS = 10_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 2 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;

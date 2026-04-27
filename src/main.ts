@@ -13,7 +13,7 @@ if (isDebugEnabled()) {
   void import('./debug-hud').then((m) => m.initDebugHud());
 }
 
-const POLL_MIN_MS = 15_000;
+const POLL_MIN_MS = 5_000;
 const POLL_MAX_MS = 60_000;
 const POLL_BUFFER_MS = 1_000;
 const POLL_FALLBACK_INTERVAL_MS = 60_000;
@@ -91,22 +91,28 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
   return buses.map((b) => {
     const prev = lastBy.get(b.vehicleId);
     let heading: number | null = prev?.heading ?? null;
+    let motionBearing: number | null = null;
+    if (prev) {
+      const moved = metersBetween(prev, b);
+      if (moved >= MIN_MOVE_M_FOR_BEARING) {
+        motionBearing = bearingDeg(prev.lat, prev.lng, b.lat, b.lng);
+      }
+    }
 
     if (currentRoute) {
       const snap = snapToRoute(b.lat, b.lng, currentRoute);
       if (snap && snap.distM <= SNAP_MAX_DIST_M) {
-        heading = snap.bearing;
-      } else if (prev) {
-        const moved = metersBetween(prev, b);
-        if (moved >= MIN_MOVE_M_FOR_BEARING) {
-          heading = bearingDeg(prev.lat, prev.lng, b.lat, b.lng);
+        if (motionBearing !== null) {
+          const diff = ((motionBearing - snap.bearing + 540) % 360) - 180;
+          heading = Math.abs(diff) > 90 ? (snap.bearing + 180) % 360 : snap.bearing;
+        } else if (heading === null) {
+          heading = null;
         }
+      } else if (motionBearing !== null) {
+        heading = motionBearing;
       }
-    } else if (prev) {
-      const moved = metersBetween(prev, b);
-      if (moved >= MIN_MOVE_M_FOR_BEARING) {
-        heading = bearingDeg(prev.lat, prev.lng, b.lat, b.lng);
-      }
+    } else if (motionBearing !== null) {
+      heading = motionBearing;
     }
 
     lastBy.set(b.vehicleId, { lat: b.lat, lng: b.lng, heading });
@@ -146,7 +152,8 @@ async function tick() {
     map.setBuses(buses);
     if (isFirstFetch) {
       isFirstFetch = false;
-      map.fitToBuses(buses);
+      const anyBusInView = buses.some((b) => map.isInView(b.lat, b.lng));
+      if (!anyBusInView) map.fitToBuses(buses);
       ui.setSubmitState('success');
       if (submitStateTimer) clearTimeout(submitStateTimer);
       submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
@@ -263,7 +270,9 @@ ui.onPickPlace((place) => {
   if (searchStateTimer) clearTimeout(searchStateTimer);
   searchStateTimer = window.setTimeout(() => ui.setSearchState('idle'), 2500);
   map.setUser(place.lat, place.lng);
-  map.flyTo(place.lat, place.lng, 15);
+  if (!map.isInView(place.lat, place.lng, -40)) {
+    map.flyTo(place.lat, place.lng);
+  }
 });
 
 document.getElementById('zoom-in')?.addEventListener('click', () => map.zoomIn());

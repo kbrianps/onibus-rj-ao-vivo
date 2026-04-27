@@ -15,6 +15,15 @@ export interface BusesResult {
   refreshIntervalMs: number | null;
 }
 
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 export async function fetchBuses(opts: FetchOpts): Promise<BusesResult> {
   const params = new URLSearchParams();
   if (opts.line) params.set('line', opts.line);
@@ -23,7 +32,7 @@ export async function fetchBuses(opts: FetchOpts): Promise<BusesResult> {
     throw new Error('line or bbox required');
   }
   const res = await fetch(`${BASE}/sppo?${params}`, { signal: opts.signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new HttpError(res.status);
   const refreshedAt = Number(res.headers.get('X-Snapshot-Refreshed-At')) || null;
   const refreshIntervalMs = Number(res.headers.get('X-Snapshot-Refresh-Interval-Ms')) || null;
   const buses = (await res.json()) as Bus[];

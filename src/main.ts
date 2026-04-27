@@ -1,7 +1,7 @@
 import './styles.css';
 import { initMap, type BusWithHeading } from './map';
 import { initUI } from './ui';
-import { fetchBuses, fetchLines, fetchRoute } from './api';
+import { fetchBuses, fetchLines, fetchRoute, HttpError } from './api';
 import { searchPlaces, reverseGeocode } from './geocode';
 import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
 import { getCurrentPosition, watchPosition } from './geo';
@@ -197,7 +197,8 @@ async function tick() {
     }
     ui.setPollLoading(false);
     if (myEpoch === tickEpoch) {
-      schedulePoll(isAbort ? POLL_MIN_MS : POLL_MAX_MS);
+      const isWarmup = err instanceof HttpError && err.status === 503;
+      schedulePoll(isAbort || isWarmup ? POLL_MIN_MS : POLL_MAX_MS);
     }
   }
 }

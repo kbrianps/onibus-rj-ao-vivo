@@ -173,11 +173,7 @@ async function tick() {
 }
 
 async function startPolling(line: string) {
-  if (line === currentLine) {
-    if (pollTimer) clearTimeout(pollTimer);
-    tick();
-    return;
-  }
+  if (line === currentLine) return;
   currentLine = line;
   isFirstFetch = true;
   lastBy.clear();

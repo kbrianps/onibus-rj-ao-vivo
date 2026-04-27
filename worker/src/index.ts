@@ -101,11 +101,21 @@ interface Snapshot {
   refreshedAt: number;
 }
 
+const UPSTREAM_TIMEOUT_MS = 12_000;
+
 async function refreshSnapshot(): Promise<Snapshot> {
-  const res = await fetch(SOURCE, {
-    headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
-    cf: { cacheTtl: SNAPSHOT_TTL_S, cacheEverything: true },
-  });
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(SOURCE, {
+      headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
+      cf: { cacheTtl: SNAPSHOT_TTL_S, cacheEverything: true },
+      signal: ac.signal,
+    });
+  } finally {
+    clearTimeout(t);
+  }
   if (!res.ok) throw new Error(`upstream ${res.status}`);
   const raw = (await res.json()) as RawBus[];
   const latest = new Map<string, Bus>();
@@ -128,13 +138,11 @@ async function refreshSnapshot(): Promise<Snapshot> {
   return { buses, refreshedAt };
 }
 
-async function loadSnapshot(): Promise<Snapshot> {
+async function loadCachedSnapshot(): Promise<Snapshot | null> {
   const hit = await caches.default.match(SNAPSHOT_CACHE_KEY);
-  if (hit) {
-    const refreshedAt = Number(hit.headers.get('X-Snapshot-Refreshed-At')) || Date.now();
-    return { buses: await hit.json<Bus[]>(), refreshedAt };
-  }
-  return refreshSnapshot();
+  if (!hit) return null;
+  const refreshedAt = Number(hit.headers.get('X-Snapshot-Refreshed-At')) || Date.now();
+  return { buses: await hit.json<Bus[]>(), refreshedAt };
 }
 
 function jsonResponse(body: unknown, request: Request, env: Env, status = 200): Response {
@@ -332,7 +340,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
         (request.headers.get('Sec-Fetch-Mode') === 'navigate' ||
           (request.headers.get('Accept') || '').includes('text/html'));
       if (isDocNav) {
-        ctx.waitUntil(loadSnapshot().catch(() => {}));
+        ctx.waitUntil(
+          (async () => {
+            const cached = await loadCachedSnapshot();
+            if (!cached) await refreshSnapshot().catch(() => {});
+          })(),
+        );
       }
       const assetUrl = new URL(request.url);
       assetUrl.pathname = pathname;
@@ -384,11 +397,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
 
     if (pathname === '/lines') {
-      let snap: Snapshot;
-      try {
-        snap = await loadSnapshot();
-      } catch (err) {
-        return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
+      let snap = await loadCachedSnapshot();
+      if (!snap) {
+        ctx.waitUntil(refreshSnapshot().catch((err) => console.error('lines warmup', err)));
+        return jsonResponse({ error: 'snapshot warming up' }, request, env, 503);
       }
       const set = new Set<string>();
       for (const b of snap.buses) if (b.line) set.add(b.line);
@@ -525,11 +537,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return jsonResponse({ error: 'line or bbox required' }, request, env, 400);
     }
 
-    let snap: Snapshot;
-    try {
-      snap = await loadSnapshot();
-    } catch (err) {
-      return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
+    let snap = await loadCachedSnapshot();
+    if (!snap) {
+      ctx.waitUntil(refreshSnapshot().catch((err) => console.error('sppo warmup', err)));
+      return jsonResponse({ error: 'snapshot warming up' }, request, env, 503);
     }
 
     const ageMs = Date.now() - snap.refreshedAt;

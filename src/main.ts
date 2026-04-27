@@ -105,8 +105,6 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
         if (motionBearing !== null) {
           const diff = ((motionBearing - snap.bearing + 540) % 360) - 180;
           heading = Math.abs(diff) > 90 ? (snap.bearing + 180) % 360 : snap.bearing;
-        } else if (heading === null) {
-          heading = null;
         }
       } else if (motionBearing !== null) {
         heading = motionBearing;
@@ -149,8 +147,10 @@ async function tick() {
     const result = await fetchBuses({ line: currentLine, signal: abortCtrl.signal });
     const buses = withHeadings(result.buses).filter((b) => !b.stale);
     map.setBuses(buses);
+    let forceQuickFollowup = false;
     if (isFirstFetch) {
       isFirstFetch = false;
+      forceQuickFollowup = true;
       const anyBusInView = buses.some((b) => map.isInView(b.lat, b.lng));
       if (!anyBusInView) map.fitToBuses(buses);
       ui.setSubmitState('success');
@@ -159,7 +159,11 @@ async function tick() {
     }
     ui.setPollLoading(false);
     if (result.refreshedAt) ui.setPollSnapshotAt(result.refreshedAt);
-    schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
+    if (forceQuickFollowup) {
+      schedulePoll(POLL_MIN_MS);
+    } else {
+      schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
+    }
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     if (isFirstFetch) {
@@ -286,8 +290,10 @@ document.getElementById('recenter')?.addEventListener('click', async () => {
     userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     manualPos = null;
     map.setUser(userPos.lat, userPos.lng);
-    if (!map.isInView(userPos.lat, userPos.lng, -40)) {
-      map.flyTo(userPos.lat, userPos.lng);
+    const inView = map.isInView(userPos.lat, userPos.lng, -40);
+    const currentZoom = map.getCenter().zoom;
+    if (!inView || currentZoom < 14) {
+      map.flyTo(userPos.lat, userPos.lng, Math.max(currentZoom, 14));
     }
     if (!watchStarted) {
       watchStarted = true;

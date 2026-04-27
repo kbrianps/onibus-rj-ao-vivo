@@ -17,6 +17,7 @@ export interface MapHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   isInView: (lat: number, lng: number, paddingPx?: number) => boolean;
+  getCenter: () => { lat: number; lng: number; zoom: number };
   onClick: (cb: (lat: number, lng: number) => void) => void;
 }
 
@@ -61,6 +62,9 @@ export function initMap(containerId: string): MapHandle {
     },
     isInView(lat, lng, paddingPx) {
       return inner.isInView(lat, lng, paddingPx);
+    },
+    getCenter() {
+      return inner.getCenter();
     },
     onClick(cb) {
       inner.on('click', cb);

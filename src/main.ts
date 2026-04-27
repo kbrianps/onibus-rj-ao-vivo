@@ -6,7 +6,7 @@ import { searchPlaces, reverseGeocode } from './geocode';
 import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
 import { getCurrentPosition, watchPosition } from './geo';
 import { bearingDeg, type Bus } from './types';
-import { isDebugEnabled, trackSnap, installEarlyDebugCapture } from './debug';
+import { isDebugEnabled, trackSnap, installEarlyDebugCapture, debugState } from './debug';
 
 if (isDebugEnabled()) {
   installEarlyDebugCapture();
@@ -129,23 +129,38 @@ function nextPollDelay(refreshedAt: number | null, intervalMs: number | null): n
   return Math.max(POLL_MIN_MS, Math.min(POLL_MAX_MS, delay));
 }
 
+let tickEpoch = 0;
+
 function schedulePoll(ms: number) {
   if (pollTimer) clearTimeout(pollTimer);
   pollTimer = window.setTimeout(tick, ms);
+  if (debugState.enabled) console.log(`[poll] scheduled in ${Math.round(ms / 100) / 10}s`);
 }
 
 async function tick() {
   if (!currentLine) return;
+  const myEpoch = ++tickEpoch;
   if (document.visibilityState !== 'visible') {
+    if (debugState.enabled) console.log('[poll] hidden tab, retry in 60s');
     schedulePoll(POLL_MAX_MS);
     return;
   }
   abortCtrl?.abort();
   abortCtrl = new AbortController();
   ui.setPollLoading(true);
+  const startedAt = performance.now();
   try {
     const result = await fetchBuses({ line: currentLine, signal: abortCtrl.signal });
+    const elapsed = Math.round(performance.now() - startedAt);
+    const ageS = result.refreshedAt
+      ? Math.round((Date.now() - result.refreshedAt) / 1000)
+      : 'n/a';
     const buses = withHeadings(result.buses).filter((b) => !b.stale);
+    if (debugState.enabled) {
+      console.log(
+        `[poll] tick=${myEpoch} ok in ${elapsed}ms · ${buses.length} bus(es) · snapshot age ${ageS}s`,
+      );
+    }
     map.setBuses(buses);
     let forceQuickFollowup = false;
     if (isFirstFetch) {
@@ -159,20 +174,29 @@ async function tick() {
     }
     ui.setPollLoading(false);
     if (result.refreshedAt) ui.setPollSnapshotAt(result.refreshedAt);
-    if (forceQuickFollowup) {
-      schedulePoll(POLL_MIN_MS);
-    } else {
-      schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
+    if (myEpoch === tickEpoch) {
+      if (forceQuickFollowup) schedulePoll(POLL_MIN_MS);
+      else schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
+    } else if (debugState.enabled) {
+      console.log(`[poll] tick=${myEpoch} done but superseded; not scheduling`);
     }
   } catch (err) {
-    if ((err as Error).name === 'AbortError') return;
-    if (isFirstFetch) {
+    const isAbort = (err as Error).name === 'AbortError';
+    if (debugState.enabled) {
+      const elapsed = Math.round(performance.now() - startedAt);
+      console.log(
+        `[poll] tick=${myEpoch} ${isAbort ? 'aborted' : 'error'} after ${elapsed}ms${isAbort ? '' : ` :: ${(err as Error).message}`}`,
+      );
+    }
+    if (!isAbort) console.error(err);
+    if (isFirstFetch && !isAbort) {
       isFirstFetch = false;
       ui.setSubmitState('idle');
     }
-    console.error(err);
     ui.setPollLoading(false);
-    schedulePoll(POLL_MAX_MS);
+    if (myEpoch === tickEpoch) {
+      schedulePoll(isAbort ? POLL_MIN_MS : POLL_MAX_MS);
+    }
   }
 }
 
@@ -311,6 +335,9 @@ document.getElementById('recenter')?.addEventListener('click', async () => {
 });
 
 document.addEventListener('visibilitychange', () => {
+  if (debugState.enabled) {
+    console.log(`[poll] visibility -> ${document.visibilityState}`);
+  }
   if (document.visibilityState === 'visible' && currentLine) tick();
 });
 

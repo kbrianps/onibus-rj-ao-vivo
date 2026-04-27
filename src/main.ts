@@ -18,7 +18,7 @@ const POLL_MAX_MS = 60_000;
 const POLL_BUFFER_MS = 1_000;
 const POLL_FALLBACK_INTERVAL_MS = 60_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
-const STALE_MS = 2 * 60 * 1000;
+const STALE_MS = 5 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
 
 const map = initMap('map');
@@ -105,6 +105,8 @@ function withHeadings(buses: Bus[]): BusWithHeading[] {
         if (motionBearing !== null) {
           const diff = ((motionBearing - snap.bearing + 540) % 360) - 180;
           heading = Math.abs(diff) > 90 ? (snap.bearing + 180) % 360 : snap.bearing;
+        } else if (heading === null) {
+          heading = snap.bearing;
         }
       } else if (motionBearing !== null) {
         heading = motionBearing;

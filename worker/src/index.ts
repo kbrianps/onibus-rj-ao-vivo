@@ -533,13 +533,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
 
     const ageMs = Date.now() - snap.refreshedAt;
-    if (ageMs > 2 * SNAPSHOT_REFRESH_INTERVAL_MS) {
-      try {
-        snap = await refreshSnapshot();
-      } catch (err) {
-        console.error('on-demand refresh failed', err);
-      }
-    } else if (ageMs > SNAPSHOT_REFRESH_INTERVAL_MS) {
+    if (ageMs > SNAPSHOT_REFRESH_INTERVAL_MS) {
       ctx.waitUntil(refreshSnapshot().catch((err) => console.error('background refresh failed', err)));
     }
 

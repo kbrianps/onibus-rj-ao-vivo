@@ -14,7 +14,7 @@ export interface UIHandle {
   setSearchState: (state: SubmitState) => void;
   setSearchValue: (value: string) => void;
   setLineValue: (line: string) => void;
-  setPollNextAt: (tsMs: number | null) => void;
+  setPollSnapshotAt: (tsMs: number | null) => void;
   setPollLoading: (loading: boolean) => void;
 }
 
@@ -39,36 +39,48 @@ export function initUI(): UIHandle {
   let pickPlaceCb: ((p: Place) => void) | null = null;
   let pickLineCb: ((line: string) => void) | null = null;
   const POLL_LOADING_MIN_MS = 500;
-  let pollNextAt: number | null = null;
+  const FRESH_GLOW_MS = 1500;
+  let pollSnapshotAt: number | null = null;
+  let lastShownSnapshotAt: number | null = null;
+  let freshGlowUntil = 0;
   let pollLoading = false;
   let pollLoadingStartedAt = 0;
   let pollLoadingClearTimer: number | null = null;
   let pollTickHandle: number | null = null;
 
+  function ageLabel(ageMs: number): string {
+    const seconds = Math.max(0, Math.round(ageMs / 1000));
+    if (seconds < 60) return `Atualizado há ${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remSec = seconds % 60;
+    if (minutes === 1 && remSec === 0) return 'Atualizado há 1 min';
+    if (remSec === 0) return `Atualizado há ${minutes} min`;
+    return `Atualizado há ${minutes} min ${remSec}s`;
+  }
+
   function renderPollStatus() {
     pollStatus.hidden = false;
-    if (pollLoading) {
-      pollStatus.dataset.state = 'loading';
-      pollStatusText.textContent = 'Atualizando…';
-      return;
-    }
-    if (pollNextAt === null) {
+    if (pollSnapshotAt === null) {
       pollStatus.dataset.state = 'empty';
       pollStatusText.textContent = 'Selecione uma linha de ônibus';
       return;
     }
-    pollStatus.dataset.state = 'idle';
-    const remaining = Math.max(0, Math.ceil((pollNextAt - Date.now()) / 1000));
-    pollStatusText.textContent =
-      remaining === 0 ? 'Atualizando em instantes…' : `Próxima atualização em ${remaining}s`;
+    const now = Date.now();
+    if (now < freshGlowUntil) {
+      pollStatus.dataset.state = pollLoading ? 'loading' : 'fresh';
+      pollStatusText.textContent = 'Atualizado agora';
+      return;
+    }
+    pollStatus.dataset.state = pollLoading ? 'loading' : 'idle';
+    pollStatusText.textContent = ageLabel(now - pollSnapshotAt);
   }
 
   function ensurePollTick() {
     if (pollTickHandle !== null) return;
     pollTickHandle = window.setInterval(() => {
-      if (pollLoading || pollNextAt === null) return;
+      if (pollSnapshotAt === null) return;
       renderPollStatus();
-    }, 500);
+    }, 1000);
   }
 
   searchForm.addEventListener('submit', (e) => e.preventDefault());
@@ -187,8 +199,12 @@ export function initUI(): UIHandle {
     setLineValue(line) {
       input.value = line;
     },
-    setPollNextAt(tsMs) {
-      pollNextAt = tsMs;
+    setPollSnapshotAt(tsMs) {
+      pollSnapshotAt = tsMs;
+      if (tsMs !== null && tsMs !== lastShownSnapshotAt) {
+        lastShownSnapshotAt = tsMs;
+        freshGlowUntil = Date.now() + FRESH_GLOW_MS;
+      }
       ensurePollTick();
       renderPollStatus();
     },

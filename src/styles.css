@@ -108,6 +108,16 @@ body {
   opacity: 0.5;
 }
 
+#poll-status[data-state='fresh'] {
+  color: var(--text);
+}
+
+#poll-status[data-state='fresh'] #poll-status-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+  transition: box-shadow 1s ease-out;
+}
+
 @keyframes poll-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.5); opacity: 0.55; }

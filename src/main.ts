@@ -134,7 +134,6 @@ function nextPollDelay(refreshedAt: number | null, intervalMs: number | null): n
 function schedulePoll(ms: number) {
   if (pollTimer) clearTimeout(pollTimer);
   pollTimer = window.setTimeout(tick, ms);
-  ui.setPollNextAt(Date.now() + ms);
 }
 
 async function tick() {
@@ -159,6 +158,7 @@ async function tick() {
       submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
     }
     ui.setPollLoading(false);
+    if (result.refreshedAt) ui.setPollSnapshotAt(result.refreshedAt);
     schedulePoll(nextPollDelay(result.refreshedAt, result.refreshIntervalMs));
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
@@ -322,6 +322,6 @@ document.addEventListener('visibilitychange', () => {
 
   const last = loadLastLine();
   if (last) ui.setLineValue(last);
-  ui.setPollNextAt(null);
+  ui.setPollSnapshotAt(null);
   document.body.classList.add('ready');
 })();

@@ -532,6 +532,17 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return jsonResponse({ error: 'upstream unavailable', detail: String(err) }, request, env, 502);
     }
 
+    const ageMs = Date.now() - snap.refreshedAt;
+    if (ageMs > 2 * SNAPSHOT_REFRESH_INTERVAL_MS) {
+      try {
+        snap = await refreshSnapshot();
+      } catch (err) {
+        console.error('on-demand refresh failed', err);
+      }
+    } else if (ageMs > SNAPSHOT_REFRESH_INTERVAL_MS) {
+      ctx.waitUntil(refreshSnapshot().catch((err) => console.error('background refresh failed', err)));
+    }
+
     const result: Bus[] = [];
     for (const b of snap.buses) {
       if (line && b.line !== line) continue;

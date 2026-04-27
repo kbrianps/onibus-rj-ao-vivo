@@ -173,6 +173,11 @@ async function tick() {
 }
 
 async function startPolling(line: string) {
+  if (line === currentLine) {
+    if (pollTimer) clearTimeout(pollTimer);
+    tick();
+    return;
+  }
   currentLine = line;
   isFirstFetch = true;
   lastBy.clear();
@@ -285,7 +290,9 @@ document.getElementById('recenter')?.addEventListener('click', async () => {
     userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     manualPos = null;
     map.setUser(userPos.lat, userPos.lng);
-    map.recenter();
+    if (!map.isInView(userPos.lat, userPos.lng, -40)) {
+      map.flyTo(userPos.lat, userPos.lng);
+    }
     if (!watchStarted) {
       watchStarted = true;
       watchPosition((p) => {
@@ -298,9 +305,7 @@ document.getElementById('recenter')?.addEventListener('click', async () => {
         if (place) ui.setSearchValue(place.label);
       })
       .catch(() => {});
-  } catch {
-    map.recenter();
-  }
+  } catch {}
 });
 
 document.addEventListener('visibilitychange', () => {

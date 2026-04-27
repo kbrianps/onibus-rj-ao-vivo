@@ -543,10 +543,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     }
 
     const res = jsonResponse(result, request, env);
-    res.headers.set(
-      'Cache-Control',
-      'public, max-age=0, s-maxage=60, stale-while-revalidate=120',
-    );
+    res.headers.set('Cache-Control', 'private, max-age=0, no-store');
     res.headers.set('X-Snapshot-Refreshed-At', String(snap.refreshedAt));
     res.headers.set('X-Snapshot-Refresh-Interval-Ms', String(SNAPSHOT_REFRESH_INTERVAL_MS));
     return res;

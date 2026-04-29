@@ -317,7 +317,7 @@ function toggleSolo(line: string): void {
 
 ui.onSubmitLine(addLine);
 ui.onPickLine(addLine);
-ui.onChipTap(toggleSolo);
+ui.onChipSolo(toggleSolo);
 ui.onChipRemove(removeLine);
 
 map.onBusClick((vehicleId) => {

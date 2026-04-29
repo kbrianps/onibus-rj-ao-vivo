@@ -33,7 +33,7 @@ export interface UIHandle {
   setPollSnapshotAt: (tsMs: number | null) => void;
   setPollLoading: (loading: boolean) => void;
   setLineChips: (chips: LineChip[]) => void;
-  onChipTap: (cb: (line: string) => void) => void;
+  onChipSolo: (cb: (line: string) => void) => void;
   onChipRemove: (cb: (line: string) => void) => void;
   showBusPopup: (data: BusPopupData) => void;
   hideBusPopup: () => void;
@@ -58,14 +58,19 @@ export function initUI(): UIHandle {
   const pollStatus = document.getElementById('poll-status') as HTMLDivElement;
   const pollStatusText = document.getElementById('poll-status-text') as HTMLSpanElement;
   const lineChipsEl = document.getElementById('line-chips') as HTMLElement;
+  const chipMenu = document.getElementById('chip-menu') as HTMLDivElement;
   const busPopup = document.getElementById('bus-popup') as HTMLDivElement;
   const toastEl = document.getElementById('toast') as HTMLDivElement;
 
   let pickPlaceCb: ((p: Place) => void) | null = null;
   let pickLineCb: ((line: string) => void) | null = null;
-  let chipTapCb: ((line: string) => void) | null = null;
+  let chipSoloCb: ((line: string) => void) | null = null;
   let chipRemoveCb: ((line: string) => void) | null = null;
   let toastTimer: number | null = null;
+  let busPopupOpenedAt = 0;
+  let chipMenuOpenForLine: string | null = null;
+  let chipMenuOpenedAt = 0;
+  let currentChipsMap = new Map<string, LineChip>();
   const POLL_LOADING_MIN_MS = 500;
   const FRESH_GLOW_MS = 1500;
   let pollSnapshotAt: number | null = null;
@@ -148,26 +153,74 @@ export function initUI(): UIHandle {
   });
 
   lineChipsEl.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const removeBtn = target.closest('button[data-remove]') as HTMLButtonElement | null;
-    if (removeBtn) {
-      e.stopPropagation();
-      const line = removeBtn.dataset.remove!;
-      chipRemoveCb?.(line);
-      return;
-    }
-    const chip = target.closest('button[data-line]') as HTMLButtonElement | null;
-    if (chip) {
-      const line = chip.dataset.line!;
-      chipTapCb?.(line);
+    const chip = (e.target as HTMLElement).closest('button[data-line]') as HTMLButtonElement | null;
+    if (!chip) return;
+    const line = chip.dataset.line!;
+    if (chipMenuOpenForLine === line) {
+      hideChipMenu();
+    } else {
+      openChipMenu(line, chip);
     }
   });
 
+  chipMenu.addEventListener('click', (e) => {
+    const action = (e.target as HTMLElement).closest('button[data-action]') as
+      | HTMLButtonElement
+      | null;
+    if (!action) return;
+    const line = action.dataset.line!;
+    const kind = action.dataset.action!;
+    hideChipMenu();
+    if (kind === 'solo') chipSoloCb?.(line);
+    else if (kind === 'remove') chipRemoveCb?.(line);
+  });
+
+  function openChipMenu(line: string, anchor: HTMLElement) {
+    const chip = currentChipsMap.get(line);
+    if (!chip) return;
+    const isSolo = chip.solo;
+    chipMenu.innerHTML = `
+      <button type="button" role="menuitem" data-action="solo" data-line="${line}">
+        ${isSolo ? 'Mostrar todas as linhas' : 'Ver só esta linha'}
+      </button>
+      <button type="button" role="menuitem" data-action="remove" data-line="${line}" data-danger="true">
+        Remover linha
+      </button>
+    `;
+    chipMenu.style.setProperty('--menu-color', chip.color);
+    chipMenu.hidden = false;
+    chipMenuOpenForLine = line;
+    chipMenuOpenedAt = Date.now();
+    requestAnimationFrame(() => {
+      const rect = anchor.getBoundingClientRect();
+      const w = chipMenu.offsetWidth;
+      const h = chipMenu.offsetHeight;
+      const left = Math.min(window.innerWidth - w - 8, rect.right + 10);
+      const top = Math.max(8, Math.min(window.innerHeight - h - 8, rect.top - 4));
+      chipMenu.style.left = `${left}px`;
+      chipMenu.style.top = `${top}px`;
+    });
+  }
+
+  function hideChipMenu() {
+    chipMenu.hidden = true;
+    chipMenuOpenForLine = null;
+  }
+
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (busPopup.hidden) return;
-    if (target.closest('#bus-popup')) return;
-    busPopup.hidden = true;
+    const now = Date.now();
+    if (!busPopup.hidden && now - busPopupOpenedAt > 80 && !target.closest('#bus-popup')) {
+      busPopup.hidden = true;
+    }
+    if (
+      chipMenuOpenForLine &&
+      now - chipMenuOpenedAt > 80 &&
+      !target.closest('#chip-menu') &&
+      !target.closest('#line-chips')
+    ) {
+      hideChipMenu();
+    }
   });
 
   return {
@@ -286,6 +339,10 @@ export function initUI(): UIHandle {
       }, wait);
     },
     setLineChips(chips) {
+      currentChipsMap = new Map(chips.map((c) => [c.line, c]));
+      if (chipMenuOpenForLine && !currentChipsMap.has(chipMenuOpenForLine)) {
+        hideChipMenu();
+      }
       if (chips.length === 0) {
         lineChipsEl.innerHTML = '';
         lineChipsEl.dataset.empty = 'true';
@@ -298,12 +355,12 @@ export function initUI(): UIHandle {
           const dim = anySolo && !c.solo ? ' data-dim="true"' : '';
           const solo = c.solo ? ' data-solo="true"' : '';
           const safe = c.line.replace(/"/g, '&quot;');
-          return `<button type="button" data-line="${safe}" style="--line-color:${c.color}"${dim}${solo} aria-label="Linha ${safe}"><span class="chip-label">${safe}</span><button type="button" data-remove="${safe}" aria-label="Remover linha ${safe}" tabindex="-1">×</button></button>`;
+          return `<button type="button" data-line="${safe}" style="--line-color:${c.color}"${dim}${solo} aria-label="Linha ${safe}, toque para opções">${safe}</button>`;
         })
         .join('');
     },
-    onChipTap(cb) {
-      chipTapCb = cb;
+    onChipSolo(cb) {
+      chipSoloCb = cb;
     },
     onChipRemove(cb) {
       chipRemoveCb = cb;
@@ -319,7 +376,7 @@ export function initUI(): UIHandle {
         <div class="bus-popup-meta">${data.speed > 0 ? `${Math.round(data.speed)} km/h · ` : ''}há ${ageLabel}</div>
       `;
       busPopup.hidden = false;
-      // position above the pin (pin tip at data.x, data.y — popup goes up)
+      busPopupOpenedAt = Date.now();
       requestAnimationFrame(() => {
         const w = busPopup.offsetWidth;
         const h = busPopup.offsetHeight;

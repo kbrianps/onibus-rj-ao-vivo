@@ -350,36 +350,35 @@ body {
 
 #line-chips {
   position: fixed;
-  top: calc(var(--safe-top) + 4.4rem);
+  bottom: calc(var(--safe-bottom) + 9rem);
   left: 0.85rem;
   z-index: 1000;
   display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 0.4rem;
   pointer-events: none;
-  max-height: calc(100vh - 14rem);
-  overflow-y: auto;
 }
 
-#line-chips:empty,
 #line-chips[data-empty='true'] {
   display: none;
 }
 
 #line-chips > button {
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 0.7rem;
   border: 2px solid transparent;
   border-radius: 999px;
   background: var(--line-color, var(--accent));
   color: white;
-  font: 600 0.85rem/1 system-ui, -apple-system, sans-serif;
+  font: 700 0.9rem/1 system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.02em;
   cursor: pointer;
   box-shadow: var(--shadow);
-  min-width: 2.6rem;
   transition: opacity 160ms ease, transform 160ms ease, border-color 160ms ease;
 }
 
@@ -388,36 +387,67 @@ body {
 }
 
 #line-chips > button[data-dim='true'] {
-  opacity: 0.4;
+  opacity: 0.45;
 }
 
 #line-chips > button[data-solo='true'] {
-  border-color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow-strong);
 }
 
-#line-chips .chip-label {
-  letter-spacing: 0.02em;
+#chip-menu {
+  position: fixed;
+  z-index: 1100;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow-strong);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  font-size: 0.9rem;
 }
 
-#line-chips button[data-remove] {
-  pointer-events: auto;
-  display: inline-grid;
-  place-items: center;
-  width: 1.3rem;
-  height: 1.3rem;
-  padding: 0;
+#chip-menu::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  transform: rotate(45deg);
+  box-shadow: -2px 2px 4px rgba(15, 23, 42, 0.06);
+}
+
+#chip-menu button {
+  text-align: left;
+  background: transparent;
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
+  color: var(--text);
+  font: inherit;
 }
 
-#line-chips button[data-remove]:hover {
-  background: rgba(255, 255, 255, 0.35);
+#chip-menu button:hover {
+  background: var(--surface-2);
+}
+
+#chip-menu button[data-danger='true'] {
+  color: #dc2626;
+}
+
+#chip-menu button[data-action='solo']::before {
+  content: '';
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--menu-color, var(--accent));
+  margin-right: 0.5rem;
+  vertical-align: middle;
 }
 
 #bus-popup {

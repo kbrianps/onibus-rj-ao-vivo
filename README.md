@@ -159,6 +159,7 @@ npx wrangler deploy
 - **Direção da seta dos ônibus é aproximada**: calculada pelo bearing entre 2 polls consecutivos. Em ruas curvas ou com GPS ruidoso pode dar diagonal estranha. A correção definitiva (snap-to-polyline da rota GTFS) está planejada — ver Roadmap.
 - **`wrangler dev` (modo local) tem vazamento de file descriptors** em sessões longas. Sintoma: depois de horas com poll de 15s, o worker para de responder. Solução em dev: `pkill -9 workerd && npx wrangler dev`. Em produção CF não acontece.
 - **Cold-cache 503 no primeiro acesso a um colo CF**: o `caches.default` do Cloudflare Worker é per-colo (datacenter local), não global. Se você cair num colo onde o cache do snapshot ainda não foi populado (cron rodou em outro colo, ou cache TTL expirou), o `/sppo` retorna 503 instantâneo enquanto refresca em background. Cliente faz retry a cada 5s; tipicamente 3-6 retries (15-30s) até o cache popular. Mitigação planejada: mover snapshot pra R2 ou KV (cache global). Ver [Roadmap](#roadmap).
+- **Linhas sem rota desenhada**: o `worker/data/routes.json` é gerado a partir do GTFS oficial do Rio (TUMI Datahub). Linhas novas, raras ou que mudaram de número desde a última atualização do GTFS não tem polyline; os ônibus aparecem no mapa mas sem o traçado da rota. Atualizar via `scripts/build-routes.py` quando a prefeitura publica novo GTFS.
 
 ### Modo debug
 
@@ -212,7 +213,7 @@ Realismo: API consumida por JS no browser nunca é 100% privada — o JS é aber
 - [ ] **Fase 3**: cores ida/volta distintas, ETA estimado, highlight do trecho próximo do usuário
 - [ ] Compressão polyline encoding (~80% menor que JSON puro)
 - [ ] Lazy-loading de rotas via R2 (Worker bundle vira trivial)
-- [ ] Integrar BRT (API separada)
+- [ ] **Rastreamento do BRT** (TransOeste, TransCarioca, TransOlímpica, TransBrasil): o BRT da MobilidadeRio expõe os ônibus articulados via uma API distinta da SPPO. Estações, corredores exclusivos e frequência alta tornam ele relevante pra moradores da Zona Oeste e da Barra. Implica adicionar fonte upstream nova no worker, novo endpoint (ex: `/brt`) e diferenciação visual dos ônibus no cliente.
 - [ ] Build nativo via Capacitor (Android/iOS)
 
 ### Atribuição de dados
@@ -369,6 +370,7 @@ npx wrangler deploy
 - **Bus arrow direction is approximate**: computed by bearing between two consecutive polls. On curvy streets or with noisy GPS it may point oddly. A proper fix (snap-to-polyline using the GTFS route) is planned — see Roadmap.
 - **`wrangler dev` (local mode) leaks file descriptors** during long sessions. Symptom: after hours of 15s polling, the worker stops responding. Dev workaround: `pkill -9 workerd && npx wrangler dev`. Does not happen on production Cloudflare Workers.
 - **Cold-cache 503 on first request to a Cloudflare colo**: Worker `caches.default` is per-colo (local datacenter), not global. If you hit a colo where the snapshot cache hasn't been populated yet (cron ran in another colo, or TTL expired), `/sppo` returns 503 instantly while it warms in the background. Client retries every 5s; usually 3-6 retries (15-30s) until the cache fills. Planned mitigation: move snapshot to R2 or KV (global). See [Roadmap](#roadmap-1).
+- **Lines without a drawn route**: `worker/data/routes.json` is generated from the official Rio GTFS feed (TUMI Datahub). New, rare, or recently renumbered lines don't have a polyline; their buses still show on the map but without the route trace. Refresh via `scripts/build-routes.py` whenever the city publishes a new GTFS.
 
 ### Debug mode
 
@@ -417,7 +419,7 @@ Honest take: an API consumed by browser JS can never be 100% private — JS is o
 - [ ] **Phase 3**: distinct colours for outbound/inbound, ETA estimation, highlight nearby route segment
 - [ ] Polyline encoding compression (~80% smaller than raw JSON)
 - [ ] Lazy-load routes via R2 (worker bundle becomes trivial)
-- [ ] Integrate BRT (separate API)
+- [ ] **BRT tracking** (TransOeste, TransCarioca, TransOlímpica, TransBrasil): MobilidadeRio's BRT system exposes articulated buses via a separate API from SPPO. Dedicated corridors, stations, and high frequency make it especially relevant to West Zone and Barra residents. Requires adding a new upstream in the worker, a new endpoint (e.g. `/brt`), and visual differentiation in the client.
 - [ ] Native build via Capacitor (Android/iOS)
 
 ### Data attribution

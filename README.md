@@ -158,6 +158,7 @@ npx wrangler deploy
 - **OSM brasileiro não tem números de casa**: a busca de endereço encontra a rua mas não o número exato. O número digitado é descartado antes de mandar pro Nominatim.
 - **Direção da seta dos ônibus é aproximada**: calculada pelo bearing entre 2 polls consecutivos. Em ruas curvas ou com GPS ruidoso pode dar diagonal estranha. A correção definitiva (snap-to-polyline da rota GTFS) está planejada — ver Roadmap.
 - **`wrangler dev` (modo local) tem vazamento de file descriptors** em sessões longas. Sintoma: depois de horas com poll de 15s, o worker para de responder. Solução em dev: `pkill -9 workerd && npx wrangler dev`. Em produção CF não acontece.
+- **Cold-cache 503 no primeiro acesso a um colo CF**: o `caches.default` do Cloudflare Worker é per-colo (datacenter local), não global. Se você cair num colo onde o cache do snapshot ainda não foi populado (cron rodou em outro colo, ou cache TTL expirou), o `/sppo` retorna 503 instantâneo enquanto refresca em background. Cliente faz retry a cada 5s; tipicamente 3-6 retries (15-30s) até o cache popular. Mitigação planejada: mover snapshot pra R2 ou KV (cache global). Ver [Roadmap](#roadmap).
 
 ### Modo debug
 
@@ -207,6 +208,7 @@ Realismo: API consumida por JS no browser nunca é 100% privada — o JS é aber
 - [x] Persistência de linha e local
 - [x] Polilinha da rota oficial (GTFS)
 - [x] Snap-to-polyline pra direção correta da seta (bearing do segmento da rota mais próximo do ônibus, fallback pra bearing entre polls quando off-route)
+- [ ] **Snapshot global em R2/KV**: hoje cada colo do Cloudflare aquece seu próprio cache do SPPO independentemente, então a primeira request num colo frio devolve 503 enquanto refresca (15-30s). Mover o snapshot pro R2 (ou KV) faria o cache ser global e a primeira request em qualquer colo seria fast. Custo estimado: <$1/mês.
 - [ ] **Fase 3**: cores ida/volta distintas, ETA estimado, highlight do trecho próximo do usuário
 - [ ] Compressão polyline encoding (~80% menor que JSON puro)
 - [ ] Lazy-loading de rotas via R2 (Worker bundle vira trivial)
@@ -366,6 +368,7 @@ npx wrangler deploy
 - **Brazilian OSM data lacks house numbers**: address search finds the street but not the exact number. Trailing numbers are stripped from the query before being sent to Nominatim.
 - **Bus arrow direction is approximate**: computed by bearing between two consecutive polls. On curvy streets or with noisy GPS it may point oddly. A proper fix (snap-to-polyline using the GTFS route) is planned — see Roadmap.
 - **`wrangler dev` (local mode) leaks file descriptors** during long sessions. Symptom: after hours of 15s polling, the worker stops responding. Dev workaround: `pkill -9 workerd && npx wrangler dev`. Does not happen on production Cloudflare Workers.
+- **Cold-cache 503 on first request to a Cloudflare colo**: Worker `caches.default` is per-colo (local datacenter), not global. If you hit a colo where the snapshot cache hasn't been populated yet (cron ran in another colo, or TTL expired), `/sppo` returns 503 instantly while it warms in the background. Client retries every 5s; usually 3-6 retries (15-30s) until the cache fills. Planned mitigation: move snapshot to R2 or KV (global). See [Roadmap](#roadmap-1).
 
 ### Debug mode
 
@@ -410,6 +413,7 @@ Honest take: an API consumed by browser JS can never be 100% private — JS is o
 - [x] Persisted line + location
 - [x] Official route polyline (GTFS)
 - [x] Snap-to-polyline for correct arrow direction (bearing from the closest route segment, falling back to inter-poll bearing when off-route)
+- [ ] **Global snapshot via R2/KV**: each Cloudflare colo currently warms its own SPPO snapshot independently, so the first request to a cold colo returns 503 while the cache refreshes in the background (15-30s). Moving the snapshot to R2 (or KV) makes the cache global and the first request to any colo lands fast. Estimated cost: <$1/mo.
 - [ ] **Phase 3**: distinct colours for outbound/inbound, ETA estimation, highlight nearby route segment
 - [ ] Polyline encoding compression (~80% smaller than raw JSON)
 - [ ] Lazy-load routes via R2 (worker bundle becomes trivial)

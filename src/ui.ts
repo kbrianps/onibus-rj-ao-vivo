@@ -2,6 +2,22 @@ import type { Place } from './geocode';
 
 export type SubmitState = 'idle' | 'loading' | 'success';
 
+export interface LineChip {
+  line: string;
+  color: string;
+  solo: boolean;
+}
+
+export interface BusPopupData {
+  vehicleId: string;
+  line: string;
+  color: string;
+  ageS: number;
+  speed: number;
+  x: number;
+  y: number;
+}
+
 export interface UIHandle {
   onSubmitLine: (cb: (line: string) => void) => void;
   onLineInput: (cb: (q: string) => void) => void;
@@ -16,6 +32,12 @@ export interface UIHandle {
   setLineValue: (line: string) => void;
   setPollSnapshotAt: (tsMs: number | null) => void;
   setPollLoading: (loading: boolean) => void;
+  setLineChips: (chips: LineChip[]) => void;
+  onChipTap: (cb: (line: string) => void) => void;
+  onChipRemove: (cb: (line: string) => void) => void;
+  showBusPopup: (data: BusPopupData) => void;
+  hideBusPopup: () => void;
+  toast: (msg: string, ms?: number) => void;
 }
 
 const SUBMIT_ICONS: Record<SubmitState, string> = {
@@ -35,9 +57,15 @@ export function initUI(): UIHandle {
   const searchResults = document.getElementById('search-results') as HTMLUListElement;
   const pollStatus = document.getElementById('poll-status') as HTMLDivElement;
   const pollStatusText = document.getElementById('poll-status-text') as HTMLSpanElement;
+  const lineChipsEl = document.getElementById('line-chips') as HTMLElement;
+  const busPopup = document.getElementById('bus-popup') as HTMLDivElement;
+  const toastEl = document.getElementById('toast') as HTMLDivElement;
 
   let pickPlaceCb: ((p: Place) => void) | null = null;
   let pickLineCb: ((line: string) => void) | null = null;
+  let chipTapCb: ((line: string) => void) | null = null;
+  let chipRemoveCb: ((line: string) => void) | null = null;
+  let toastTimer: number | null = null;
   const POLL_LOADING_MIN_MS = 500;
   const FRESH_GLOW_MS = 1500;
   let pollSnapshotAt: number | null = null;
@@ -113,10 +141,33 @@ export function initUI(): UIHandle {
     const li = (e.target as HTMLElement).closest('li[data-line]') as HTMLLIElement | null;
     if (!li || !pickLineCb) return;
     const line = li.dataset.line!;
-    input.value = line;
+    input.value = '';
     lineSuggestions.hidden = true;
     input.setAttribute('aria-expanded', 'false');
     pickLineCb(line);
+  });
+
+  lineChipsEl.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const removeBtn = target.closest('button[data-remove]') as HTMLButtonElement | null;
+    if (removeBtn) {
+      e.stopPropagation();
+      const line = removeBtn.dataset.remove!;
+      chipRemoveCb?.(line);
+      return;
+    }
+    const chip = target.closest('button[data-line]') as HTMLButtonElement | null;
+    if (chip) {
+      const line = chip.dataset.line!;
+      chipTapCb?.(line);
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (busPopup.hidden) return;
+    if (target.closest('#bus-popup')) return;
+    busPopup.hidden = true;
   });
 
   return {
@@ -233,6 +284,62 @@ export function initUI(): UIHandle {
         pollLoadingClearTimer = null;
         renderPollStatus();
       }, wait);
+    },
+    setLineChips(chips) {
+      if (chips.length === 0) {
+        lineChipsEl.innerHTML = '';
+        lineChipsEl.dataset.empty = 'true';
+        return;
+      }
+      delete lineChipsEl.dataset.empty;
+      const anySolo = chips.some((c) => c.solo);
+      lineChipsEl.innerHTML = chips
+        .map((c) => {
+          const dim = anySolo && !c.solo ? ' data-dim="true"' : '';
+          const solo = c.solo ? ' data-solo="true"' : '';
+          const safe = c.line.replace(/"/g, '&quot;');
+          return `<button type="button" data-line="${safe}" style="--line-color:${c.color}"${dim}${solo} aria-label="Linha ${safe}"><span class="chip-label">${safe}</span><button type="button" data-remove="${safe}" aria-label="Remover linha ${safe}" tabindex="-1">×</button></button>`;
+        })
+        .join('');
+    },
+    onChipTap(cb) {
+      chipTapCb = cb;
+    },
+    onChipRemove(cb) {
+      chipRemoveCb = cb;
+    },
+    showBusPopup(data) {
+      const ageLabel = data.ageS < 60 ? `${data.ageS}s` : `${Math.floor(data.ageS / 60)}min`;
+      busPopup.style.setProperty('--popup-color', data.color);
+      busPopup.innerHTML = `
+        <div class="bus-popup-header">
+          <span class="bus-popup-line">${data.line}</span>
+          <span class="bus-popup-ord">${data.vehicleId}</span>
+        </div>
+        <div class="bus-popup-meta">${data.speed > 0 ? `${Math.round(data.speed)} km/h · ` : ''}há ${ageLabel}</div>
+      `;
+      busPopup.hidden = false;
+      // position above the pin (pin tip at data.x, data.y — popup goes up)
+      requestAnimationFrame(() => {
+        const w = busPopup.offsetWidth;
+        const h = busPopup.offsetHeight;
+        const left = Math.max(8, Math.min(window.innerWidth - w - 8, data.x - w / 2));
+        const top = Math.max(8, data.y - h - 14);
+        busPopup.style.left = `${left}px`;
+        busPopup.style.top = `${top}px`;
+      });
+    },
+    hideBusPopup() {
+      busPopup.hidden = true;
+    },
+    toast(msg, ms = 3000) {
+      toastEl.textContent = msg;
+      toastEl.hidden = false;
+      if (toastTimer !== null) clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        toastEl.hidden = true;
+        toastTimer = null;
+      }, ms);
     },
   };
 }

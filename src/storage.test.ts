@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { loadLastLine, saveLastLine, loadLastLocation, saveLastLocation } from './storage';
+import { loadLastLines, saveLastLines, loadLastLocation, saveLastLocation } from './storage';
 
 const memStorage: Record<string, string> = {};
 
@@ -22,13 +22,18 @@ beforeEach(() => {
 });
 
 describe('storage', () => {
-  it('returns null when no line saved', () => {
-    expect(loadLastLine()).toBeNull();
+  it('returns empty array when no lines saved', () => {
+    expect(loadLastLines()).toEqual([]);
   });
 
-  it('persists and reads last line', () => {
-    saveLastLine('485');
-    expect(loadLastLine()).toBe('485');
+  it('persists and reads last lines (multi)', () => {
+    saveLastLines(['485', '908']);
+    expect(loadLastLines()).toEqual(['485', '908']);
+  });
+
+  it('falls back to legacy single-line key when present', () => {
+    memStorage['onibus-rj:lastLine'] = '104';
+    expect(loadLastLines()).toEqual(['104']);
   });
 
   it('returns null when no location saved', () => {

@@ -530,10 +530,18 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       return jsonResponse({ error: 'not found' }, request, env, 404);
     }
 
-    const line = url.searchParams.get('line')?.trim().toUpperCase() || null;
+    const lineParam = url.searchParams.get('line')?.trim();
+    const lines = lineParam
+      ? new Set(
+          lineParam
+            .split(',')
+            .map((s) => s.trim().toUpperCase())
+            .filter(Boolean),
+        )
+      : null;
     const bbox = parseBbox(url.searchParams.get('bbox'));
 
-    if (!line && !bbox) {
+    if ((!lines || lines.size === 0) && !bbox) {
       return jsonResponse({ error: 'line or bbox required' }, request, env, 400);
     }
 
@@ -550,7 +558,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
     const result: Bus[] = [];
     for (const b of snap.buses) {
-      if (line && b.line !== line) continue;
+      if (lines && !lines.has(b.line)) continue;
       if (bbox) {
         const [minLat, minLng, maxLat, maxLng] = bbox;
         if (b.lat < minLat || b.lat > maxLat || b.lng < minLng || b.lng > maxLng) continue;

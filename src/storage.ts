@@ -1,17 +1,21 @@
 const LAST_LINE_KEY = 'onibus-rj:lastLine';
+const LAST_LINES_KEY = 'onibus-rj:lastLines';
 const LAST_LOCATION_KEY = 'onibus-rj:lastLocation';
 
-export function loadLastLine(): string | null {
+export function loadLastLines(): string[] {
   try {
-    return localStorage.getItem(LAST_LINE_KEY);
+    const raw = localStorage.getItem(LAST_LINES_KEY);
+    if (raw) return (JSON.parse(raw) as string[]).filter((l) => typeof l === 'string');
+    const single = localStorage.getItem(LAST_LINE_KEY);
+    return single ? [single] : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-export function saveLastLine(line: string): void {
+export function saveLastLines(lines: string[]): void {
   try {
-    localStorage.setItem(LAST_LINE_KEY, line);
+    localStorage.setItem(LAST_LINES_KEY, JSON.stringify(lines));
   } catch {}
 }
 

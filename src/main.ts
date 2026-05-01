@@ -19,14 +19,26 @@ if (isDebugEnabled()) {
 }
 
 const POLL_MIN_MS = 5_000;
-const POLL_MAX_MS = 60_000;
-const POLL_BUFFER_MS = 1_000;
-const POLL_FALLBACK_INTERVAL_MS = 60_000;
+const POLL_MAX_MS = 15_000;
+const POLL_BUFFER_MS = 500;
+const POLL_FALLBACK_INTERVAL_MS = 10_000;
 const MIN_MOVE_M_FOR_BEARING = 8;
 const STALE_MS = 5 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
 const MAX_LINES = 5;
 const SNAP_CACHE_MAX = 400;
+
+const LINE_PALETTE = [
+  'hsl(199, 89%, 48%)',
+  'hsl(28, 89%, 48%)',
+  'hsl(140, 70%, 38%)',
+  'hsl(270, 70%, 55%)',
+  'hsl(330, 80%, 50%)',
+  'hsl(170, 75%, 38%)',
+  'hsl(245, 75%, 55%)',
+  'hsl(45, 85%, 47%)',
+  'hsl(305, 70%, 48%)',
+];
 
 const map = initMap('map');
 const ui = initUI();
@@ -36,6 +48,7 @@ interface LineState {
   routeShapes: number[][][] | null;
   lastBy: Map<string, { lat: number; lng: number; heading: number | null }>;
   firstFetchPending: boolean;
+  hasBuses: boolean;
 }
 
 const selectedLines = new Map<string, LineState>();
@@ -49,11 +62,11 @@ let tickEpoch = 0;
 
 const snapCache = new Map<string, { distM: number; bearing: number } | null>();
 
-function lineColor(line: string): string {
-  let h = 0;
-  for (let i = 0; i < line.length; i++) h = (h * 31 + line.charCodeAt(i)) | 0;
-  const hue = ((h % 360) + 360) % 360;
-  return `hsl(${hue}, 65%, 48%)`;
+function pickLineColor(): string {
+  const used = new Set<string>();
+  for (const state of selectedLines.values()) used.add(state.color);
+  for (const c of LINE_PALETTE) if (!used.has(c)) return c;
+  return LINE_PALETTE[selectedLines.size % LINE_PALETTE.length];
 }
 
 function snapToRoute(
@@ -153,12 +166,20 @@ function visibleBuses(buses: BusWithHeading[]): BusWithHeading[] {
 }
 
 function buildRouteLayers(): RouteLayer[] {
-  const layers: RouteLayer[] = [];
+  const inactive: RouteLayer[] = [];
+  const active: RouteLayer[] = [];
   for (const [line, state] of selectedLines) {
     if (soloLine && line !== soloLine) continue;
-    if (state.routeShapes) layers.push({ shapes: state.routeShapes, color: state.color });
+    if (!state.routeShapes) continue;
+    const layer: RouteLayer = { shapes: state.routeShapes, color: state.color };
+    if (state.hasBuses) {
+      active.push(layer);
+    } else {
+      layer.dashed = true;
+      inactive.push(layer);
+    }
   }
-  return layers;
+  return [...inactive, ...active];
 }
 
 function renderChips() {
@@ -215,7 +236,20 @@ async function tick() {
         `[poll] tick=${myEpoch} ok in ${elapsed}ms · ${processed.length} bus(es) (${selectedLines.size} line(s)) · snapshot age ${ageS}s`,
       );
     }
+    const countByLine = new Map<string, number>();
+    for (const b of visible) countByLine.set(b.line, (countByLine.get(b.line) ?? 0) + 1);
+    let routeLayersChanged = false;
+    for (const [line, state] of selectedLines) {
+      const has = (countByLine.get(line) ?? 0) > 0;
+      if (state.hasBuses !== has) {
+        state.hasBuses = has;
+        routeLayersChanged = true;
+      }
+    }
+    if (routeLayersChanged) map.setRoutes(buildRouteLayers());
+
     map.setBuses(visible);
+    ui.setBusesCount(visible.length);
 
     let forceQuickFollowup = false;
     let pendingFitTargets: BusWithHeading[] | null = null;
@@ -269,10 +303,11 @@ async function addLine(line: string): Promise<void> {
     return;
   }
   const state: LineState = {
-    color: lineColor(line),
+    color: pickLineColor(),
     routeShapes: null,
     lastBy: new Map(),
     firstFetchPending: true,
+    hasBuses: false,
   };
   selectedLines.set(line, state);
   saveLastLines(Array.from(selectedLines.keys()));
@@ -299,6 +334,7 @@ function removeLine(line: string): void {
     if (pollTimer) clearTimeout(pollTimer);
     map.clearBuses();
     knownBuses.clear();
+    ui.setBusesCount(0);
     ui.setPollSnapshotAt(null);
     return;
   }
@@ -338,9 +374,10 @@ map.onBusClick((vehicleId) => {
   });
 });
 
-let allLines: string[] | null = null;
-let linesLoading: Promise<string[]> | null = null;
-async function getLines(): Promise<string[]> {
+type LineInfo = { line: string; active: boolean };
+let allLines: LineInfo[] | null = null;
+let linesLoading: Promise<LineInfo[]> | null = null;
+async function getLines(): Promise<LineInfo[]> {
   if (allLines) return allLines;
   if (!linesLoading) {
     linesLoading = fetchLines()
@@ -364,7 +401,10 @@ ui.onLineInput(async (q) => {
   try {
     const lines = await getLines();
     const upper = q.toUpperCase();
-    const matches = lines.filter((l) => l.startsWith(upper) && !selectedLines.has(l));
+    const matches = lines.filter(
+      (l) => l.line.startsWith(upper) && !selectedLines.has(l.line),
+    );
+    matches.sort((a, b) => Number(b.active) - Number(a.active));
     ui.setLineSuggestions(matches);
   } catch (err) {
     console.error(err);

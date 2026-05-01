@@ -39,7 +39,12 @@ export async function fetchBuses(opts: FetchOpts): Promise<BusesResult> {
   return { buses, refreshedAt, refreshIntervalMs };
 }
 
-export async function fetchLines(signal?: AbortSignal): Promise<string[]> {
+export interface LineInfo {
+  line: string;
+  active: boolean;
+}
+
+export async function fetchLines(signal?: AbortSignal): Promise<LineInfo[]> {
   const res = await fetch(`${BASE}/lines`, { signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

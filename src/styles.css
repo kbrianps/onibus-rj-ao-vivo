@@ -76,7 +76,6 @@ body {
   gap: 0.45rem;
   background: var(--surface);
   border-radius: 999px;
-  box-shadow: var(--shadow);
   padding: 0.4rem 0.85rem 0.4rem 0.7rem;
   font-size: 0.78rem;
   color: var(--muted);
@@ -106,6 +105,14 @@ body {
 #poll-status[data-state='empty'] #poll-status-dot {
   background: var(--muted);
   opacity: 0.5;
+}
+
+#poll-status[data-state='no-buses'] {
+  color: #b45309;
+}
+
+#poll-status[data-state='no-buses'] #poll-status-dot {
+  background: #f59e0b;
 }
 
 #poll-status[data-state='fresh'] {
@@ -265,6 +272,10 @@ body {
 }
 
 #line-suggestions li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.55rem 0.85rem;
   border-radius: 8px;
   cursor: pointer;
@@ -275,6 +286,16 @@ body {
 #line-suggestions li:hover {
   background: var(--surface-2);
   color: var(--accent);
+}
+
+#line-suggestions li[data-inactive='true'] .suggestion-line {
+  color: var(--muted);
+}
+
+#line-suggestions .suggestion-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.01em;
 }
 
 #line-form {
@@ -366,20 +387,42 @@ body {
 
 #line-chips > button {
   pointer-events: auto;
-  display: inline-grid;
-  place-items: center;
-  min-width: 2.5rem;
-  height: 2.5rem;
-  padding: 0 0.7rem;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0;
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: 11px;
   background: var(--line-color, var(--accent));
   color: white;
-  font: 700 0.9rem/1 system-ui, -apple-system, sans-serif;
-  letter-spacing: 0.02em;
+  display: grid;
+  place-items: center;
+  font: 700 0.85rem/1 system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.01em;
   cursor: pointer;
   box-shadow: var(--shadow);
   transition: opacity 160ms ease, transform 160ms ease, border-color 160ms ease;
+  text-align: center;
+  overflow: hidden;
+}
+
+#line-chips .chip-row {
+  display: block;
+  line-height: 1;
+  letter-spacing: 0;
+  padding: 0 0.15rem;
+}
+
+#line-chips .chip-row[data-size='sm'] {
+  font-size: 0.85rem;
+}
+
+#line-chips .chip-row[data-size='md'] {
+  font-size: 0.7rem;
+}
+
+#line-chips .chip-row[data-size='lg'] {
+  font-size: 0.55rem;
 }
 
 #line-chips > button:hover {
@@ -387,7 +430,7 @@ body {
 }
 
 #line-chips > button[data-dim='true'] {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 #line-chips > button[data-solo='true'] {
@@ -402,10 +445,13 @@ body {
   border-radius: 12px;
   box-shadow: var(--shadow-strong);
   padding: 0.3rem;
-  display: flex;
   flex-direction: column;
   min-width: 12rem;
   font-size: 0.9rem;
+}
+
+#chip-menu:not([hidden]) {
+  display: flex;
 }
 
 #chip-menu::before {

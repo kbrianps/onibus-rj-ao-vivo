@@ -22,7 +22,7 @@ export interface UIHandle {
   onSubmitLine: (cb: (line: string) => void) => void;
   onLineInput: (cb: (q: string) => void) => void;
   onPickLine: (cb: (line: string) => void) => void;
-  setLineSuggestions: (lines: string[]) => void;
+  setLineSuggestions: (lines: { line: string; active: boolean }[]) => void;
   setSubmitState: (state: SubmitState) => void;
   onSearchInput: (cb: (q: string) => void) => void;
   onPickPlace: (cb: (place: Place) => void) => void;
@@ -32,6 +32,7 @@ export interface UIHandle {
   setLineValue: (line: string) => void;
   setPollSnapshotAt: (tsMs: number | null) => void;
   setPollLoading: (loading: boolean) => void;
+  setBusesCount: (count: number) => void;
   setLineChips: (chips: LineChip[]) => void;
   onChipSolo: (cb: (line: string) => void) => void;
   onChipRemove: (cb: (line: string) => void) => void;
@@ -67,9 +68,7 @@ export function initUI(): UIHandle {
   let chipSoloCb: ((line: string) => void) | null = null;
   let chipRemoveCb: ((line: string) => void) | null = null;
   let toastTimer: number | null = null;
-  let busPopupOpenedAt = 0;
   let chipMenuOpenForLine: string | null = null;
-  let chipMenuOpenedAt = 0;
   let currentChipsMap = new Map<string, LineChip>();
   const POLL_LOADING_MIN_MS = 500;
   const FRESH_GLOW_MS = 1500;
@@ -80,6 +79,12 @@ export function initUI(): UIHandle {
   let pollLoadingStartedAt = 0;
   let pollLoadingClearTimer: number | null = null;
   let pollTickHandle: number | null = null;
+  let busesCount = 0;
+
+  function chipContent(line: string): string {
+    const size = line.length <= 4 ? 'sm' : line.length <= 6 ? 'md' : 'lg';
+    return `<span class="chip-row" data-size="${size}">${line}</span>`;
+  }
 
   function ageLabel(ageMs: number): string {
     const seconds = Math.max(0, Math.round(ageMs / 1000));
@@ -96,6 +101,11 @@ export function initUI(): UIHandle {
     if (pollSnapshotAt === null) {
       pollStatus.dataset.state = 'empty';
       pollStatusText.textContent = 'Selecione uma linha de ônibus';
+      return;
+    }
+    if (busesCount === 0) {
+      pollStatus.dataset.state = 'no-buses';
+      pollStatusText.textContent = 'Nenhum ônibus disponível';
       return;
     }
     const now = Date.now();
@@ -179,10 +189,14 @@ export function initUI(): UIHandle {
     const chip = currentChipsMap.get(line);
     if (!chip) return;
     const isSolo = chip.solo;
+    const showSolo = currentChipsMap.size > 1;
+    const soloButton = showSolo
+      ? `<button type="button" role="menuitem" data-action="solo" data-line="${line}">${
+          isSolo ? 'Mostrar todas as linhas' : 'Ver só esta linha'
+        }</button>`
+      : '';
     chipMenu.innerHTML = `
-      <button type="button" role="menuitem" data-action="solo" data-line="${line}">
-        ${isSolo ? 'Mostrar todas as linhas' : 'Ver só esta linha'}
-      </button>
+      ${soloButton}
       <button type="button" role="menuitem" data-action="remove" data-line="${line}" data-danger="true">
         Remover linha
       </button>
@@ -190,7 +204,6 @@ export function initUI(): UIHandle {
     chipMenu.style.setProperty('--menu-color', chip.color);
     chipMenu.hidden = false;
     chipMenuOpenForLine = line;
-    chipMenuOpenedAt = Date.now();
     requestAnimationFrame(() => {
       const rect = anchor.getBoundingClientRect();
       const w = chipMenu.offsetWidth;
@@ -207,15 +220,13 @@ export function initUI(): UIHandle {
     chipMenuOpenForLine = null;
   }
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener('pointerdown', (e) => {
     const target = e.target as HTMLElement;
-    const now = Date.now();
-    if (!busPopup.hidden && now - busPopupOpenedAt > 80 && !target.closest('#bus-popup')) {
+    if (!busPopup.hidden && !target.closest('#bus-popup')) {
       busPopup.hidden = true;
     }
     if (
       chipMenuOpenForLine &&
-      now - chipMenuOpenedAt > 80 &&
       !target.closest('#chip-menu') &&
       !target.closest('#line-chips')
     ) {
@@ -261,7 +272,14 @@ export function initUI(): UIHandle {
       }
       lineSuggestions.innerHTML = lines
         .slice(0, 10)
-        .map((l) => `<li data-line="${l}" role="option">${l}</li>`)
+        .map((l) => {
+          const safe = l.line.replace(/"/g, '&quot;');
+          const dim = !l.active ? ' data-inactive="true"' : '';
+          const hint = !l.active
+            ? '<span class="suggestion-hint">sem ônibus agora</span>'
+            : '';
+          return `<li data-line="${safe}" role="option"${dim}><span class="suggestion-line">${safe}</span>${hint}</li>`;
+        })
         .join('');
       lineSuggestions.hidden = false;
       input.setAttribute('aria-expanded', 'true');
@@ -338,6 +356,10 @@ export function initUI(): UIHandle {
         renderPollStatus();
       }, wait);
     },
+    setBusesCount(count) {
+      busesCount = count;
+      renderPollStatus();
+    },
     setLineChips(chips) {
       currentChipsMap = new Map(chips.map((c) => [c.line, c]));
       if (chipMenuOpenForLine && !currentChipsMap.has(chipMenuOpenForLine)) {
@@ -355,7 +377,7 @@ export function initUI(): UIHandle {
           const dim = anySolo && !c.solo ? ' data-dim="true"' : '';
           const solo = c.solo ? ' data-solo="true"' : '';
           const safe = c.line.replace(/"/g, '&quot;');
-          return `<button type="button" data-line="${safe}" style="--line-color:${c.color}"${dim}${solo} aria-label="Linha ${safe}, toque para opções">${safe}</button>`;
+          return `<button type="button" data-line="${safe}" style="--line-color:${c.color}"${dim}${solo} aria-label="Linha ${safe}, toque para opções">${chipContent(c.line)}</button>`;
         })
         .join('');
     },
@@ -376,7 +398,6 @@ export function initUI(): UIHandle {
         <div class="bus-popup-meta">${data.speed > 0 ? `${Math.round(data.speed)} km/h · ` : ''}há ${ageLabel}</div>
       `;
       busPopup.hidden = false;
-      busPopupOpenedAt = Date.now();
       requestAnimationFrame(() => {
         const w = busPopup.offsetWidth;
         const h = busPopup.offsetHeight;

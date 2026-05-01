@@ -20,8 +20,9 @@ interface Bus {
 }
 
 const SOURCE = 'https://dados.mobilidade.rio/gps/sppo';
-const SNAPSHOT_TTL_S = 80;
-const SNAPSHOT_REFRESH_INTERVAL_MS = 60_000;
+const SNAPSHOT_TTL_S = 300;
+const SPPO_UPSTREAM_CACHE_TTL_S = 5;
+const SNAPSHOT_REFRESH_INTERVAL_MS = 10_000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_CACHE_KEY = new Request('https://onibus-rj-cache/snapshot', { method: 'GET' });
 const UA_RE = /(Mozilla|Chrome|Safari|Firefox|Edge|Opera|OPR|SamsungBrowser|UCBrowser|Vivaldi)/i;
@@ -35,15 +36,30 @@ function getAllowedOrigins(env: Env): Set<string> {
   );
 }
 
+function isLocalhostOrigin(value: string | null): boolean {
+  if (!value) return false;
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'http:') return false;
+    return u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
 function isAllowedOrigin(request: Request, env: Env): boolean {
   const allowed = getAllowedOrigins(env);
+  const allowDevLocalhost = env.ALLOW_LOCALHOST_ORIGIN === '1';
   const origin = request.headers.get('Origin');
   if (origin && allowed.has(origin)) return true;
+  if (allowDevLocalhost && isLocalhostOrigin(origin)) return true;
   const referer = request.headers.get('Referer');
   if (referer) {
     try {
       const u = new URL(referer);
-      if (allowed.has(`${u.protocol}//${u.host}`)) return true;
+      const refOrigin = `${u.protocol}//${u.host}`;
+      if (allowed.has(refOrigin)) return true;
+      if (allowDevLocalhost && isLocalhostOrigin(refOrigin)) return true;
     } catch {}
   }
   return false;
@@ -103,39 +119,49 @@ interface Snapshot {
 
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
+let refreshInFlight: Promise<Snapshot> | null = null;
+
 async function refreshSnapshot(): Promise<Snapshot> {
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(SOURCE, {
-      headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
-      cf: { cacheTtl: SNAPSHOT_TTL_S, cacheEverything: true },
-      signal: ac.signal,
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(SOURCE, {
+        headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
+        cf: { cacheTtl: SPPO_UPSTREAM_CACHE_TTL_S, cacheEverything: true },
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(t);
+    }
+    if (!res.ok) throw new Error(`upstream ${res.status}`);
+    const raw = (await res.json()) as RawBus[];
+    const latest = new Map<string, Bus>();
+    for (const r of raw) {
+      const b = parseBus(r);
+      if (!b) continue;
+      const prev = latest.get(b.vehicleId);
+      if (!prev || b.timestamp > prev.timestamp) latest.set(b.vehicleId, b);
+    }
+    const buses = Array.from(latest.values());
+    const refreshedAt = Date.now();
+    const stored = new Response(JSON.stringify(buses), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
+        'X-Snapshot-Refreshed-At': String(refreshedAt),
+      },
     });
+    await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
+    return { buses, refreshedAt };
+  })();
+  try {
+    return await refreshInFlight;
   } finally {
-    clearTimeout(t);
+    refreshInFlight = null;
   }
-  if (!res.ok) throw new Error(`upstream ${res.status}`);
-  const raw = (await res.json()) as RawBus[];
-  const latest = new Map<string, Bus>();
-  for (const r of raw) {
-    const b = parseBus(r);
-    if (!b) continue;
-    const prev = latest.get(b.vehicleId);
-    if (!prev || b.timestamp > prev.timestamp) latest.set(b.vehicleId, b);
-  }
-  const buses = Array.from(latest.values());
-  const refreshedAt = Date.now();
-  const stored = new Response(JSON.stringify(buses), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
-      'X-Snapshot-Refreshed-At': String(refreshedAt),
-    },
-  });
-  await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
-  return { buses, refreshedAt };
 }
 
 async function loadCachedSnapshot(): Promise<Snapshot | null> {
@@ -159,6 +185,7 @@ function jsonResponse(body: unknown, request: Request, env: Env, status = 200): 
 interface Env {
   ASSETS: { fetch(req: Request): Promise<Response> };
   ALLOWED_ORIGINS?: string;
+  ALLOW_LOCALHOST_ORIGIN?: string;
   RATE_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   ROUTES: R2Bucket;
   TWA_PACKAGE_NAME?: string;
@@ -402,18 +429,28 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
         ctx.waitUntil(refreshSnapshot().catch((err) => console.error('lines warmup', err)));
         return jsonResponse({ error: 'snapshot warming up' }, request, env, 503);
       }
-      const set = new Set<string>();
-      for (const b of snap.buses) if (b.line) set.add(b.line);
-      const lines = Array.from(set).sort((a, b) => {
-        const na = Number(a);
-        const nb = Number(b);
-        const aIsNum = Number.isFinite(na);
-        const bIsNum = Number.isFinite(nb);
-        if (aIsNum && bIsNum) return na - nb;
-        if (aIsNum) return -1;
-        if (bIsNum) return 1;
-        return a.localeCompare(b);
-      });
+      const activeSet = new Set<string>();
+      for (const b of snap.buses) if (b.line) activeSet.add(b.line);
+      let routesIndex: string[] = [];
+      try {
+        const routes = await getRoutes(env);
+        routesIndex = Object.keys(routes);
+      } catch (err) {
+        console.error('routes index for /lines', err);
+      }
+      const all = new Set<string>([...activeSet, ...routesIndex]);
+      const lines = Array.from(all)
+        .sort((a, b) => {
+          const na = Number(a);
+          const nb = Number(b);
+          const aIsNum = Number.isFinite(na);
+          const bIsNum = Number.isFinite(nb);
+          if (aIsNum && bIsNum) return na - nb;
+          if (aIsNum) return -1;
+          if (bIsNum) return 1;
+          return a.localeCompare(b);
+        })
+        .map((line) => ({ line, active: activeSet.has(line) }));
       return jsonResponse(lines, request, env);
     }
 

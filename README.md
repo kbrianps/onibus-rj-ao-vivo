@@ -214,6 +214,7 @@ Realismo: API consumida por JS no browser nunca é 100% privada — o JS é aber
 - [ ] Compressão polyline encoding (~80% menor que JSON puro)
 - [ ] Lazy-loading de rotas via R2 (Worker bundle vira trivial)
 - [ ] **Acompanhamento na barra de notificações**: o app monitora um ônibus específico (ou linha) em segundo plano e mostra notificação na barra do sistema com a distância/tempo estimado até o usuário. Implica Web Push API + service worker handler + permissão de notificação. Em Android (TWA) cai direto na barra de notificações nativa.
+- [ ] **Demais modais de transporte do Rio**: VLT carioca, MetrôRio, trens da SuperVia, barcas (CCR Barcas), teleférico do Alemão (quando voltar). Cada um tem fonte/protocolo distinto (ou nenhum em tempo real). Vale mapear o que existe de público antes de prometer.
 - [ ] **Rastreamento do BRT** (TransOeste, TransCarioca, TransOlímpica, TransBrasil): o BRT da MobilidadeRio expõe os ônibus articulados via uma API distinta da SPPO. Estações, corredores exclusivos e frequência alta tornam ele relevante pra moradores da Zona Oeste e da Barra. Implica adicionar fonte upstream nova no worker, novo endpoint (ex: `/brt`) e diferenciação visual dos ônibus no cliente.
 - [ ] Build nativo via Capacitor (Android/iOS)
 
@@ -421,6 +422,7 @@ Honest take: an API consumed by browser JS can never be 100% private — JS is o
 - [ ] Polyline encoding compression (~80% smaller than raw JSON)
 - [ ] Lazy-load routes via R2 (worker bundle becomes trivial)
 - [ ] **System notification tracking**: app monitors a specific bus (or line) in the background and posts the system-tray notification with distance/ETA to the user. Requires Web Push API + service worker handler + notification permission. On Android (TWA) it lands directly in the native notification shade.
+- [ ] **Other Rio transport modes**: VLT (light rail), MetrôRio, SuperVia trains, ferries (CCR Barcas), Alemão cable car (if/when reactivated). Each one has its own data source (or none at all in real time). Worth mapping what's publicly available before promising anything.
 - [ ] **BRT tracking** (TransOeste, TransCarioca, TransOlímpica, TransBrasil): MobilidadeRio's BRT system exposes articulated buses via a separate API from SPPO. Dedicated corridors, stations, and high frequency make it especially relevant to West Zone and Barra residents. Requires adding a new upstream in the worker, a new endpoint (e.g. `/brt`), and visual differentiation in the client.
 - [ ] Native build via Capacitor (Android/iOS)
 

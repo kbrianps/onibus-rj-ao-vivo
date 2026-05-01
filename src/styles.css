@@ -485,6 +485,11 @@ body {
   color: #dc2626;
 }
 
+#chip-menu button[data-active='true'] {
+  font-weight: 600;
+  color: var(--menu-color, var(--accent));
+}
+
 #chip-menu button[data-action='solo']::before {
   content: '';
   display: inline-block;

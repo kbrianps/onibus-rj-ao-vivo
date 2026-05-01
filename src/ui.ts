@@ -6,6 +6,10 @@ export interface LineChip {
   line: string;
   color: string;
   solo: boolean;
+  /** Number of route shape directions available (typically 0, 1, or 2). */
+  directions: number;
+  /** Current direction filter: null = both, 0 or 1 = only that shape. */
+  directionFilter: number | null;
 }
 
 export interface BusPopupData {
@@ -36,6 +40,7 @@ export interface UIHandle {
   setLineChips: (chips: LineChip[]) => void;
   onChipSolo: (cb: (line: string) => void) => void;
   onChipRemove: (cb: (line: string) => void) => void;
+  onChipDirection: (cb: (line: string, filter: number | null) => void) => void;
   showBusPopup: (data: BusPopupData) => void;
   hideBusPopup: () => void;
   toast: (msg: string, ms?: number) => void;
@@ -67,6 +72,7 @@ export function initUI(): UIHandle {
   let pickLineCb: ((line: string) => void) | null = null;
   let chipSoloCb: ((line: string) => void) | null = null;
   let chipRemoveCb: ((line: string) => void) | null = null;
+  let chipDirectionCb: ((line: string, filter: number | null) => void) | null = null;
   let toastTimer: number | null = null;
   let chipMenuOpenForLine: string | null = null;
   let currentChipsMap = new Map<string, LineChip>();
@@ -183,6 +189,11 @@ export function initUI(): UIHandle {
     hideChipMenu();
     if (kind === 'solo') chipSoloCb?.(line);
     else if (kind === 'remove') chipRemoveCb?.(line);
+    else if (kind === 'direction') {
+      const raw = action.dataset.dir;
+      const filter = raw === 'both' ? null : Number(raw);
+      chipDirectionCb?.(line, filter);
+    }
   });
 
   function openChipMenu(line: string, anchor: HTMLElement) {
@@ -195,8 +206,18 @@ export function initUI(): UIHandle {
           isSolo ? 'Mostrar todas as linhas' : 'Ver só esta linha'
         }</button>`
       : '';
+    let directionButtons = '';
+    if (chip.directions === 2) {
+      const opt = (raw: string, label: string, active: boolean) =>
+        `<button type="button" role="menuitem" data-action="direction" data-line="${line}" data-dir="${raw}"${active ? ' data-active="true"' : ''}>${active ? '✓ ' : ''}${label}</button>`;
+      directionButtons =
+        opt('both', 'Mostrar ambos os sentidos', chip.directionFilter === null) +
+        opt('0', 'Mostrar somente sentido 1', chip.directionFilter === 0) +
+        opt('1', 'Mostrar somente sentido 2', chip.directionFilter === 1);
+    }
     chipMenu.innerHTML = `
       ${soloButton}
+      ${directionButtons}
       <button type="button" role="menuitem" data-action="remove" data-line="${line}" data-danger="true">
         Remover linha
       </button>
@@ -386,6 +407,9 @@ export function initUI(): UIHandle {
     },
     onChipRemove(cb) {
       chipRemoveCb = cb;
+    },
+    onChipDirection(cb) {
+      chipDirectionCb = cb;
     },
     showBusPopup(data) {
       const ageLabel = data.ageS < 60 ? `${data.ageS}s` : `${Math.floor(data.ageS / 60)}min`;

@@ -46,13 +46,15 @@ const ui = initUI();
 interface LineState {
   color: string;
   routeShapes: number[][][] | null;
-  lastBy: Map<string, { lat: number; lng: number; heading: number | null }>;
+  lastBy: Map<string, { lat: number; lng: number; heading: number | null; shapeIdx: number | null }>;
   firstFetchPending: boolean;
   hasBuses: boolean;
+  /** null = both shapes, number = filter to that shape index. */
+  directionFilter: number | null;
 }
 
 const selectedLines = new Map<string, LineState>();
-const knownBuses = new Map<string, BusWithHeading>();
+const knownBuses = new Map<string, ProcessedBus>();
 let soloLine: string | null = null;
 let userPos: { lat: number; lng: number } | null = null;
 let manualPos: { lat: number; lng: number } | null = null;
@@ -60,7 +62,7 @@ let pollTimer: number | null = null;
 let abortCtrl: AbortController | null = null;
 let tickEpoch = 0;
 
-const snapCache = new Map<string, { distM: number; bearing: number } | null>();
+const snapCache = new Map<string, SnapResult | null>();
 
 function pickLineColor(): string {
   const used = new Set<string>();
@@ -69,18 +71,25 @@ function pickLineColor(): string {
   return LINE_PALETTE[selectedLines.size % LINE_PALETTE.length];
 }
 
+interface SnapResult {
+  distM: number;
+  bearing: number;
+  shapeIdx: number;
+}
+
 function snapToRoute(
   lat: number,
   lng: number,
   line: string,
   shapes: number[][][],
-): { distM: number; bearing: number } | null {
+): SnapResult | null {
   const key = `${line}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
   if (snapCache.has(key)) return snapCache.get(key) ?? null;
 
   const t0 = performance.now();
-  let best: { distM: number; bearing: number } | null = null;
-  for (const shape of shapes) {
+  let best: SnapResult | null = null;
+  for (let s = 0; s < shapes.length; s++) {
+    const shape = shapes[s];
     for (let i = 0; i < shape.length - 1; i++) {
       const [aLat, aLng] = shape[i];
       const [bLat, bLng] = shape[i + 1];
@@ -97,7 +106,7 @@ function snapToRoute(
       }
       const distM = metersBetween({ lat, lng }, { lat: pLat, lng: pLng });
       if (!best || distM < best.distM) {
-        best = { distM, bearing: bearingDeg(aLat, aLng, bLat, bLng) };
+        best = { distM, bearing: bearingDeg(aLat, aLng, bLat, bLng), shapeIdx: s };
       }
     }
   }
@@ -120,15 +129,20 @@ function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: n
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function processBuses(rawBuses: Bus[]): BusWithHeading[] {
+interface ProcessedBus extends BusWithHeading {
+  shapeIdx: number | null;
+}
+
+function processBuses(rawBuses: Bus[]): ProcessedBus[] {
   const now = Date.now();
-  const out: BusWithHeading[] = [];
+  const out: ProcessedBus[] = [];
   for (const b of rawBuses) {
     const lineState = selectedLines.get(b.line);
     if (!lineState) continue;
 
     const prev = lineState.lastBy.get(b.vehicleId);
     let heading: number | null = prev?.heading ?? null;
+    let shapeIdx: number | null = prev?.shapeIdx ?? null;
     let motionBearing: number | null = null;
     if (prev) {
       const moved = metersBetween(prev, b);
@@ -142,9 +156,16 @@ function processBuses(rawBuses: Bus[]): BusWithHeading[] {
       if (snap && snap.distM <= SNAP_MAX_DIST_M) {
         if (motionBearing !== null) {
           const diff = ((motionBearing - snap.bearing + 540) % 360) - 180;
-          heading = Math.abs(diff) > 90 ? (snap.bearing + 180) % 360 : snap.bearing;
-        } else if (heading === null) {
-          heading = snap.bearing;
+          const goingForward = Math.abs(diff) <= 90;
+          heading = goingForward ? snap.bearing : (snap.bearing + 180) % 360;
+          if (lineState.routeShapes.length === 2) {
+            shapeIdx = goingForward ? snap.shapeIdx : 1 - snap.shapeIdx;
+          } else {
+            shapeIdx = snap.shapeIdx;
+          }
+        } else {
+          if (heading === null) heading = snap.bearing;
+          if (shapeIdx === null) shapeIdx = snap.shapeIdx;
         }
       } else if (motionBearing !== null) {
         heading = motionBearing;
@@ -153,16 +174,23 @@ function processBuses(rawBuses: Bus[]): BusWithHeading[] {
       heading = motionBearing;
     }
 
-    lineState.lastBy.set(b.vehicleId, { lat: b.lat, lng: b.lng, heading });
+    lineState.lastBy.set(b.vehicleId, { lat: b.lat, lng: b.lng, heading, shapeIdx });
     const stale = now - b.serverTimestamp > STALE_MS;
-    out.push({ ...b, heading, stale, color: lineState.color });
+    out.push({ ...b, heading, stale, color: lineState.color, shapeIdx });
   }
   return out;
 }
 
-function visibleBuses(buses: BusWithHeading[]): BusWithHeading[] {
-  if (!soloLine) return buses;
-  return buses.filter((b) => b.line === soloLine);
+function visibleBuses(buses: ProcessedBus[]): ProcessedBus[] {
+  return buses.filter((b) => {
+    if (soloLine && b.line !== soloLine) return false;
+    const state = selectedLines.get(b.line);
+    if (!state) return false;
+    if (state.directionFilter !== null && b.shapeIdx !== null && b.shapeIdx !== state.directionFilter) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function buildRouteLayers(): RouteLayer[] {
@@ -171,7 +199,11 @@ function buildRouteLayers(): RouteLayer[] {
   for (const [line, state] of selectedLines) {
     if (soloLine && line !== soloLine) continue;
     if (!state.routeShapes) continue;
-    const layer: RouteLayer = { shapes: state.routeShapes, color: state.color };
+    let shapesToShow = state.routeShapes;
+    if (state.directionFilter !== null && state.routeShapes[state.directionFilter]) {
+      shapesToShow = [state.routeShapes[state.directionFilter]];
+    }
+    const layer: RouteLayer = { shapes: shapesToShow, color: state.color };
     if (state.hasBuses) {
       active.push(layer);
     } else {
@@ -187,6 +219,8 @@ function renderChips() {
     line,
     color: state.color,
     solo: line === soloLine,
+    directions: state.routeShapes ? state.routeShapes.length : 0,
+    directionFilter: state.directionFilter,
   }));
   ui.setLineChips(chips);
 }
@@ -308,6 +342,7 @@ async function addLine(line: string): Promise<void> {
     lastBy: new Map(),
     firstFetchPending: true,
     hasBuses: false,
+    directionFilter: null,
   };
   selectedLines.set(line, state);
   saveLastLines(Array.from(selectedLines.keys()));
@@ -351,10 +386,23 @@ function toggleSolo(line: string): void {
   ui.hideBusPopup();
 }
 
+function setDirectionFilter(line: string, filter: number | null): void {
+  const state = selectedLines.get(line);
+  if (!state) return;
+  state.directionFilter = filter;
+  renderChips();
+  map.setRoutes(buildRouteLayers());
+  const visible = visibleBuses(Array.from(knownBuses.values()));
+  map.setBuses(visible);
+  ui.setBusesCount(visible.length);
+  ui.hideBusPopup();
+}
+
 ui.onSubmitLine(addLine);
 ui.onPickLine(addLine);
 ui.onChipSolo(toggleSolo);
 ui.onChipRemove(removeLine);
+ui.onChipDirection((line, filter) => setDirectionFilter(line, filter));
 
 map.onBusClick((vehicleId) => {
   const bus = knownBuses.get(vehicleId);

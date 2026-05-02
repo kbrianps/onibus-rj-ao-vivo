@@ -121,47 +121,54 @@ const UPSTREAM_TIMEOUT_MS = 12_000;
 
 let refreshInFlight: Promise<Snapshot> | null = null;
 
-async function refreshSnapshot(): Promise<Snapshot> {
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(SOURCE, {
-        headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
-        cf: { cacheTtl: SPPO_UPSTREAM_CACHE_TTL_S, cacheEverything: true },
-        signal: ac.signal,
-      });
-    } finally {
-      clearTimeout(t);
-    }
-    if (!res.ok) throw new Error(`upstream ${res.status}`);
-    const raw = (await res.json()) as RawBus[];
-    const latest = new Map<string, Bus>();
-    for (const r of raw) {
-      const b = parseBus(r);
-      if (!b) continue;
-      const prev = latest.get(b.vehicleId);
-      if (!prev || b.timestamp > prev.timestamp) latest.set(b.vehicleId, b);
-    }
-    const buses = Array.from(latest.values());
-    const refreshedAt = Date.now();
-    const stored = new Response(JSON.stringify(buses), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
-        'X-Snapshot-Refreshed-At': String(refreshedAt),
-      },
-    });
-    await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
-    return { buses, refreshedAt };
-  })();
+async function doRefresh(): Promise<Snapshot> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+  let res: Response;
   try {
-    return await refreshInFlight;
+    res = await fetch(SOURCE, {
+      headers: { Accept: 'application/json', 'User-Agent': 'onibus-rj-ao-vivo-proxy/0.1' },
+      cf: { cacheTtl: SPPO_UPSTREAM_CACHE_TTL_S, cacheEverything: true },
+      signal: ac.signal,
+    });
   } finally {
-    refreshInFlight = null;
+    clearTimeout(t);
   }
+  if (!res.ok) throw new Error(`upstream ${res.status}`);
+  const raw = (await res.json()) as RawBus[];
+  const latest = new Map<string, Bus>();
+  for (const r of raw) {
+    const b = parseBus(r);
+    if (!b) continue;
+    const prev = latest.get(b.vehicleId);
+    if (!prev || b.timestamp > prev.timestamp) latest.set(b.vehicleId, b);
+  }
+  const buses = Array.from(latest.values());
+  const refreshedAt = Date.now();
+  const stored = new Response(JSON.stringify(buses), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': `public, max-age=${SNAPSHOT_TTL_S}`,
+      'X-Snapshot-Refreshed-At': String(refreshedAt),
+    },
+  });
+  await caches.default.put(SNAPSHOT_CACHE_KEY, stored.clone());
+  return { buses, refreshedAt };
+}
+
+function refreshSnapshot(): Promise<Snapshot> {
+  if (refreshInFlight) return refreshInFlight;
+  const p = Promise.race<Snapshot>([
+    doRefresh(),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('refresh hard timeout')), UPSTREAM_TIMEOUT_MS + 3000),
+    ),
+  ]);
+  refreshInFlight = p;
+  p.catch(() => {}).finally(() => {
+    if (refreshInFlight === p) refreshInFlight = null;
+  });
+  return p;
 }
 
 async function loadCachedSnapshot(): Promise<Snapshot | null> {

@@ -10,6 +10,8 @@ export interface LineChip {
   directions: number;
   /** Current direction filter: null = both, 0 or 1 = only that shape. */
   directionFilter: number | null;
+  /** Per-shape destination labels (neighborhood). */
+  directionLabels: (string | null)[];
 }
 
 export interface BusPopupData {
@@ -20,6 +22,8 @@ export interface BusPopupData {
   speed: number;
   x: number;
   y: number;
+  /** Display: "Indo para Guadalupe" or "Calculando rota…" or null. */
+  directionLabel: string | null;
 }
 
 export interface UIHandle {
@@ -37,6 +41,7 @@ export interface UIHandle {
   setPollSnapshotAt: (tsMs: number | null) => void;
   setPollLoading: (loading: boolean) => void;
   setBusesCount: (count: number) => void;
+  setCalculatingRoutes: (calculating: boolean) => void;
   setLineChips: (chips: LineChip[]) => void;
   onChipSolo: (cb: (line: string) => void) => void;
   onChipRemove: (cb: (line: string) => void) => void;
@@ -86,6 +91,7 @@ export function initUI(): UIHandle {
   let pollLoadingClearTimer: number | null = null;
   let pollTickHandle: number | null = null;
   let busesCount = 0;
+  let calculatingRoutes = false;
 
   function chipContent(line: string): string {
     const size = line.length <= 4 ? 'sm' : line.length <= 6 ? 'md' : 'lg';
@@ -107,6 +113,11 @@ export function initUI(): UIHandle {
     if (pollSnapshotAt === null) {
       pollStatus.dataset.state = 'empty';
       pollStatusText.textContent = 'Selecione uma linha de ônibus';
+      return;
+    }
+    if (calculatingRoutes) {
+      pollStatus.dataset.state = 'calculating';
+      pollStatusText.textContent = 'Calculando sentido…';
       return;
     }
     if (busesCount === 0) {
@@ -208,12 +219,16 @@ export function initUI(): UIHandle {
       : '';
     let directionButtons = '';
     if (chip.directions === 2) {
+      const labelFor = (idx: number) => {
+        const dest = chip.directionLabels?.[idx];
+        return dest ? `Indo para ${dest}` : `Sentido ${idx + 1}`;
+      };
       const opt = (raw: string, label: string, active: boolean) =>
         `<button type="button" role="menuitem" data-action="direction" data-line="${line}" data-dir="${raw}"${active ? ' data-active="true"' : ''}>${active ? '✓ ' : ''}${label}</button>`;
       directionButtons =
-        opt('both', 'Mostrar ambos os sentidos', chip.directionFilter === null) +
-        opt('0', 'Mostrar somente sentido 1', chip.directionFilter === 0) +
-        opt('1', 'Mostrar somente sentido 2', chip.directionFilter === 1);
+        opt('0', labelFor(0), chip.directionFilter === 0) +
+        opt('1', labelFor(1), chip.directionFilter === 1) +
+        opt('both', 'Mostrar ambos sentidos', chip.directionFilter === null);
     }
     chipMenu.innerHTML = `
       ${soloButton}
@@ -381,6 +396,10 @@ export function initUI(): UIHandle {
       busesCount = count;
       renderPollStatus();
     },
+    setCalculatingRoutes(calculating) {
+      calculatingRoutes = calculating;
+      renderPollStatus();
+    },
     setLineChips(chips) {
       currentChipsMap = new Map(chips.map((c) => [c.line, c]));
       if (chipMenuOpenForLine && !currentChipsMap.has(chipMenuOpenForLine)) {
@@ -414,11 +433,15 @@ export function initUI(): UIHandle {
     showBusPopup(data) {
       const ageLabel = data.ageS < 60 ? `${data.ageS}s` : `${Math.floor(data.ageS / 60)}min`;
       busPopup.style.setProperty('--popup-color', data.color);
+      const directionRow = data.directionLabel
+        ? `<div class="bus-popup-direction"${data.directionLabel.startsWith('Calculando') ? ' data-pending="true"' : ''}>${data.directionLabel}</div>`
+        : '';
       busPopup.innerHTML = `
         <div class="bus-popup-header">
           <span class="bus-popup-line">${data.line}</span>
           <span class="bus-popup-ord">${data.vehicleId}</span>
         </div>
+        ${directionRow}
         <div class="bus-popup-meta">${data.speed > 0 ? `${Math.round(data.speed)} km/h · ` : ''}há ${ageLabel}</div>
       `;
       busPopup.hidden = false;

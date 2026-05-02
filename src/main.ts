@@ -18,11 +18,25 @@ if (isDebugEnabled()) {
   void import('./debug-hud').then((m) => m.initDebugHud());
 }
 
+const DIR_LOG = (() => {
+  try {
+    return (
+      new URLSearchParams(location.search).get('logdir') === '1' ||
+      localStorage.getItem('onibus-rj:logdir') === '1' ||
+      isDebugEnabled()
+    );
+  } catch {
+    return false;
+  }
+})();
+
 const POLL_MIN_MS = 5_000;
 const POLL_MAX_MS = 15_000;
 const POLL_BUFFER_MS = 500;
 const POLL_FALLBACK_INTERVAL_MS = 10_000;
-const MIN_MOVE_M_FOR_BEARING = 8;
+const MIN_MOVE_M_FOR_BEARING = 5;
+const SPLIT_PATH_RATIO = 3;
+const SPLIT_PATH_MIN_DELTA_M = 25;
 const STALE_MS = 5 * 60 * 1000;
 const SNAP_MAX_DIST_M = 120;
 const MAX_LINES = 5;
@@ -43,14 +57,30 @@ const LINE_PALETTE = [
 const map = initMap('map');
 const ui = initUI();
 
+let manualSubmitPending = false;
+
+interface BusHistory {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  /** Locked direction (committed only after 2 consecutive consistent polls). */
+  shapeIdx: number | null;
+  /** Most recent instant vote — if next vote matches, commit to shapeIdx. */
+  lastVote: number | null;
+}
+
 interface LineState {
   color: string;
   routeShapes: number[][][] | null;
-  lastBy: Map<string, { lat: number; lng: number; heading: number | null; shapeIdx: number | null }>;
+  lastBy: Map<string, BusHistory>;
   firstFetchPending: boolean;
   hasBuses: boolean;
   /** null = both shapes, number = filter to that shape index. */
   directionFilter: number | null;
+  /** Human-readable destination labels per shape index ("Maracanã", etc). */
+  directionLabels: (string | null)[];
+  /** Successful poll cycles for this line. Direction commits land at >=2. */
+  pollsCompleted: number;
 }
 
 const selectedLines = new Map<string, LineState>();
@@ -62,7 +92,7 @@ let pollTimer: number | null = null;
 let abortCtrl: AbortController | null = null;
 let tickEpoch = 0;
 
-const snapCache = new Map<string, SnapResult | null>();
+const snapCache = new Map<string, SnapResult[]>();
 
 function pickLineColor(): string {
   const used = new Set<string>();
@@ -77,19 +107,21 @@ interface SnapResult {
   shapeIdx: number;
 }
 
-function snapToRoute(
+function snapPerShape(
   lat: number,
   lng: number,
   line: string,
   shapes: number[][][],
-): SnapResult | null {
+): SnapResult[] {
   const key = `${line}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
-  if (snapCache.has(key)) return snapCache.get(key) ?? null;
+  const cached = snapCache.get(key);
+  if (cached !== undefined) return cached;
 
   const t0 = performance.now();
-  let best: SnapResult | null = null;
+  const results: SnapResult[] = [];
   for (let s = 0; s < shapes.length; s++) {
     const shape = shapes[s];
+    let best: { distM: number; bearing: number } | null = null;
     for (let i = 0; i < shape.length - 1; i++) {
       const [aLat, aLng] = shape[i];
       const [bLat, bLng] = shape[i + 1];
@@ -106,17 +138,18 @@ function snapToRoute(
       }
       const distM = metersBetween({ lat, lng }, { lat: pLat, lng: pLng });
       if (!best || distM < best.distM) {
-        best = { distM, bearing: bearingDeg(aLat, aLng, bLat, bLng), shapeIdx: s };
+        best = { distM, bearing: bearingDeg(aLat, aLng, bLat, bLng) };
       }
     }
+    if (best) results.push({ shapeIdx: s, distM: best.distM, bearing: best.bearing });
   }
   if (snapCache.size >= SNAP_CACHE_MAX) {
     const firstKey = snapCache.keys().next().value;
     if (firstKey !== undefined) snapCache.delete(firstKey);
   }
-  snapCache.set(key, best);
+  snapCache.set(key, results);
   trackSnap(performance.now() - t0);
-  return best;
+  return results;
 }
 
 function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -143,6 +176,8 @@ function processBuses(rawBuses: Bus[]): ProcessedBus[] {
     const prev = lineState.lastBy.get(b.vehicleId);
     let heading: number | null = prev?.heading ?? null;
     let shapeIdx: number | null = prev?.shapeIdx ?? null;
+    let lastVote: number | null = prev?.lastVote ?? null;
+    let currentVote: number | null = null;
     let motionBearing: number | null = null;
     if (prev) {
       const moved = metersBetween(prev, b);
@@ -151,32 +186,114 @@ function processBuses(rawBuses: Bus[]): ProcessedBus[] {
       }
     }
 
+    let splitPathLock = false;
+    let branch: 'no-shapes' | 'no-snap' | 'split' | 'split-skip' | 'vote' | 'snap-only' =
+      'no-shapes';
+    let closestInfo: { idx: number; dist: number; bearing: number } | null = null;
+    let secondInfo: { idx: number; dist: number } | null = null;
+    let diff: number | null = null;
+    let goingForward: boolean | null = null;
     if (lineState.routeShapes) {
-      const snap = snapToRoute(b.lat, b.lng, b.line, lineState.routeShapes);
-      if (snap && snap.distM <= SNAP_MAX_DIST_M) {
+      const snaps = snapPerShape(b.lat, b.lng, b.line, lineState.routeShapes);
+      const sortedByDist = [...snaps].sort((a, b) => a.distM - b.distM);
+      const closest = sortedByDist[0];
+      if (closest) {
+        closestInfo = {
+          idx: closest.shapeIdx,
+          dist: Math.round(closest.distM),
+          bearing: Math.round(closest.bearing),
+        };
+      }
+      if (closest && closest.distM <= SNAP_MAX_DIST_M) {
+        const second = sortedByDist[1];
+        if (second) secondInfo = { idx: second.shapeIdx, dist: Math.round(second.distM) };
+        const isSplitPath =
+          lineState.routeShapes.length === 2 &&
+          second !== undefined &&
+          second.distM > closest.distM * SPLIT_PATH_RATIO + SPLIT_PATH_MIN_DELTA_M;
         if (motionBearing !== null) {
-          const diff = ((motionBearing - snap.bearing + 540) % 360) - 180;
-          const goingForward = Math.abs(diff) <= 90;
-          heading = goingForward ? snap.bearing : (snap.bearing + 180) % 360;
-          if (lineState.routeShapes.length === 2) {
-            shapeIdx = goingForward ? snap.shapeIdx : 1 - snap.shapeIdx;
-          } else {
-            shapeIdx = snap.shapeIdx;
-          }
-        } else {
-          if (heading === null) heading = snap.bearing;
-          if (shapeIdx === null) shapeIdx = snap.shapeIdx;
+          diff = ((motionBearing - closest.bearing + 540) % 360) - 180;
+          goingForward = Math.abs(diff) <= 90;
         }
-      } else if (motionBearing !== null) {
-        heading = motionBearing;
+        const motionContradictsClosest = motionBearing !== null && goingForward === false;
+        if (isSplitPath && !motionContradictsClosest) {
+          branch = 'split';
+          shapeIdx = closest.shapeIdx;
+          lastVote = closest.shapeIdx;
+          splitPathLock = true;
+          if (motionBearing !== null) {
+            heading = motionBearing;
+          } else if (heading === null) {
+            heading = closest.bearing;
+          }
+        } else if (isSplitPath && motionContradictsClosest) {
+          branch = 'split-skip';
+          heading = motionBearing;
+          if (lineState.routeShapes.length === 2) {
+            currentVote = 1 - closest.shapeIdx;
+          }
+        } else if (motionBearing !== null) {
+          branch = 'vote';
+          heading = motionBearing;
+          if (lineState.routeShapes.length === 2) {
+            currentVote = goingForward ? closest.shapeIdx : 1 - closest.shapeIdx;
+          } else {
+            currentVote = closest.shapeIdx;
+          }
+        } else if (heading === null) {
+          branch = 'snap-only';
+          heading = closest.bearing;
+        } else {
+          branch = 'snap-only';
+        }
+      } else {
+        branch = 'no-snap';
+        if (motionBearing !== null) heading = motionBearing;
       }
     } else if (motionBearing !== null) {
       heading = motionBearing;
     }
 
-    lineState.lastBy.set(b.vehicleId, { lat: b.lat, lng: b.lng, heading, shapeIdx });
+    if (!splitPathLock) {
+      if (currentVote !== null && currentVote === lastVote) {
+        shapeIdx = currentVote;
+      }
+      if (currentVote !== null) lastVote = currentVote;
+    }
+
+    if (DIR_LOG && lineState.routeShapes && lineState.routeShapes.length === 2) {
+      const labels = lineState.directionLabels;
+      const lab = (i: number | null): string => (i === null ? '-' : labels[i] ?? `idx${i}`);
+      const moved = prev ? Math.round(metersBetween(prev, b)) : 0;
+      const motionStr = motionBearing !== null ? `${Math.round(motionBearing)}°` : '-';
+      const closestStr = closestInfo
+        ? `idx${closestInfo.idx}(${lab(closestInfo.idx)}) d=${closestInfo.dist}m brg=${closestInfo.bearing}°`
+        : '-';
+      const secondStr = secondInfo
+        ? `idx${secondInfo.idx}(${lab(secondInfo.idx)}) d=${secondInfo.dist}m`
+        : '-';
+      const headingStr = heading !== null ? `${Math.round(heading)}°` : '-';
+      const diffStr = diff !== null ? `${Math.round(diff)}°` : '-';
+      const fwd = goingForward === null ? '-' : goingForward ? 'fwd' : 'rev';
+      console.log(
+        `[dir] ${b.line}/${b.vehicleId} ${branch} | moved=${moved}m motion=${motionStr} | closest=${closestStr} | second=${secondStr} | diff=${diffStr} ${fwd} | vote=${currentVote ?? '-'} last=${lastVote ?? '-'} | committed=${shapeIdx ?? '-'}(${lab(shapeIdx)}) | heading=${headingStr}${splitPathLock ? ' LOCK' : ''}`,
+      );
+    }
+
+    lineState.lastBy.set(b.vehicleId, {
+      lat: b.lat,
+      lng: b.lng,
+      heading,
+      shapeIdx,
+      lastVote,
+    });
     const stale = now - b.serverTimestamp > STALE_MS;
-    out.push({ ...b, heading, stale, color: lineState.color, shapeIdx });
+    const pending =
+      lineState.directionFilter !== null &&
+      lineState.routeShapes !== null &&
+      lineState.routeShapes.length === 2 &&
+      shapeIdx === null;
+    out.push({ ...b, heading, stale, color: lineState.color, shapeIdx, pending });
   }
   return out;
 }
@@ -191,6 +308,26 @@ function visibleBuses(buses: ProcessedBus[]): ProcessedBus[] {
     }
     return true;
   });
+}
+
+function anyLineCalculating(): boolean {
+  for (const [line, state] of selectedLines) {
+    if (state.directionFilter === null) continue;
+    if (!state.routeShapes || state.routeShapes.length !== 2) continue;
+    if (state.pollsCompleted >= 3) continue;
+    let hasCommitted = false;
+    let hasAny = false;
+    for (const bus of knownBuses.values()) {
+      if (bus.line !== line) continue;
+      hasAny = true;
+      if (bus.shapeIdx !== null) {
+        hasCommitted = true;
+        break;
+      }
+    }
+    if (hasAny && !hasCommitted) return true;
+  }
+  return false;
 }
 
 function buildRouteLayers(): RouteLayer[] {
@@ -221,6 +358,7 @@ function renderChips() {
     solo: line === soloLine,
     directions: state.routeShapes ? state.routeShapes.length : 0,
     directionFilter: state.directionFilter,
+    directionLabels: state.directionLabels,
   }));
   ui.setLineChips(chips);
 }
@@ -284,10 +422,12 @@ async function tick() {
 
     map.setBuses(visible);
     ui.setBusesCount(visible.length);
+    ui.setCalculatingRoutes(anyLineCalculating());
 
     let forceQuickFollowup = false;
     let pendingFitTargets: BusWithHeading[] | null = null;
     for (const [line, state] of selectedLines) {
+      state.pollsCompleted++;
       if (state.firstFetchPending) {
         state.firstFetchPending = false;
         forceQuickFollowup = true;
@@ -300,9 +440,12 @@ async function tick() {
     }
     if (pendingFitTargets) map.fitToBuses(pendingFitTargets);
 
-    ui.setSubmitState('success');
-    if (submitStateTimer) clearTimeout(submitStateTimer);
-    submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
+    if (forceQuickFollowup && manualSubmitPending) {
+      manualSubmitPending = false;
+      ui.setSubmitState('success');
+      if (submitStateTimer) clearTimeout(submitStateTimer);
+      submitStateTimer = window.setTimeout(() => ui.setSubmitState('idle'), 2500);
+    }
 
     ui.setPollLoading(false);
     if (result.refreshedAt) ui.setPollSnapshotAt(result.refreshedAt);
@@ -330,10 +473,12 @@ async function tick() {
   }
 }
 
-async function addLine(line: string): Promise<void> {
+async function addLine(line: string, opts: { manual?: boolean } = {}): Promise<void> {
   if (selectedLines.has(line)) return;
   if (selectedLines.size >= MAX_LINES) {
-    ui.toast(`Limite de ${MAX_LINES} linhas. Remova uma antes de adicionar.`, 3500);
+    if (opts.manual) {
+      ui.toast(`Limite de ${MAX_LINES} linhas. Remova uma antes de adicionar.`, 3500);
+    }
     return;
   }
   const state: LineState = {
@@ -343,15 +488,23 @@ async function addLine(line: string): Promise<void> {
     firstFetchPending: true,
     hasBuses: false,
     directionFilter: null,
+    directionLabels: [],
+    pollsCompleted: 0,
   };
   selectedLines.set(line, state);
   saveLastLines(Array.from(selectedLines.keys()));
   renderChips();
-  ui.setSubmitState('loading');
+  if (opts.manual) {
+    manualSubmitPending = true;
+    ui.setSubmitState('loading');
+  }
   fetchRoute(line)
     .then((r) => {
       state.routeShapes = r ? r.shapes : null;
       map.setRoutes(buildRouteLayers());
+      if (r && r.shapes.length === 2) {
+        loadDirectionLabels(line, state, r.shapes);
+      }
     })
     .catch((err) => console.error('route', err));
   if (pollTimer) clearTimeout(pollTimer);
@@ -370,9 +523,11 @@ function removeLine(line: string): void {
     map.clearBuses();
     knownBuses.clear();
     ui.setBusesCount(0);
+    ui.setCalculatingRoutes(false);
     ui.setPollSnapshotAt(null);
     return;
   }
+  ui.setCalculatingRoutes(anyLineCalculating());
   if (pollTimer) clearTimeout(pollTimer);
   tick();
 }
@@ -386,6 +541,29 @@ function toggleSolo(line: string): void {
   ui.hideBusPopup();
 }
 
+async function loadDirectionLabels(
+  line: string,
+  state: LineState,
+  shapes: number[][][],
+): Promise<void> {
+  const labels: (string | null)[] = await Promise.all(
+    shapes.map(async (shape) => {
+      const last = shape[shape.length - 1];
+      if (!last) return null;
+      try {
+        const place = await reverseGeocode(last[0], last[1]);
+        if (!place) return null;
+        return place.area || place.label.split(',')[0].trim() || null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  if (selectedLines.get(line) !== state) return;
+  state.directionLabels = labels;
+  renderChips();
+}
+
 function setDirectionFilter(line: string, filter: number | null): void {
   const state = selectedLines.get(line);
   if (!state) return;
@@ -395,11 +573,12 @@ function setDirectionFilter(line: string, filter: number | null): void {
   const visible = visibleBuses(Array.from(knownBuses.values()));
   map.setBuses(visible);
   ui.setBusesCount(visible.length);
+  ui.setCalculatingRoutes(anyLineCalculating());
   ui.hideBusPopup();
 }
 
-ui.onSubmitLine(addLine);
-ui.onPickLine(addLine);
+ui.onSubmitLine((line) => addLine(line, { manual: true }));
+ui.onPickLine((line) => addLine(line, { manual: true }));
 ui.onChipSolo(toggleSolo);
 ui.onChipRemove(removeLine);
 ui.onChipDirection((line, filter) => setDirectionFilter(line, filter));
@@ -411,6 +590,15 @@ map.onBusClick((vehicleId) => {
   const color = state?.color ?? '#0ea5e9';
   const ageS = Math.max(0, Math.round((Date.now() - bus.serverTimestamp) / 1000));
   const screen = map.latLngToContainer(bus.lat, bus.lng);
+  let directionLabel: string | null = null;
+  if (state && state.routeShapes && state.routeShapes.length === 2) {
+    if (bus.shapeIdx === null) {
+      directionLabel = 'Calculando rota…';
+    } else {
+      const dest = state.directionLabels[bus.shapeIdx];
+      directionLabel = dest ? `Indo para ${dest}` : `Sentido ${bus.shapeIdx + 1}`;
+    }
+  }
   ui.showBusPopup({
     vehicleId: bus.vehicleId,
     line: bus.line,
@@ -419,6 +607,7 @@ map.onBusClick((vehicleId) => {
     speed: bus.speed,
     x: screen.x,
     y: screen.y,
+    directionLabel,
   });
 });
 

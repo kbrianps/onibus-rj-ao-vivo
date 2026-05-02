@@ -5,6 +5,7 @@ export interface BusWithHeading extends Bus {
   heading: number | null;
   stale: boolean;
   color?: string;
+  pending?: boolean;
 }
 
 export interface RouteLayer {
@@ -46,6 +47,7 @@ export function initMap(containerId: string): MapHandle {
           heading: b.heading,
           stale: b.stale,
           color: b.color,
+          pending: b.pending,
         })),
       );
     },

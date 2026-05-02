@@ -490,6 +490,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
         lat: parseFloat(raw.lat),
         lng: parseFloat(raw.lon),
         label: short,
+        area,
         full: raw.display_name,
       };
       const res = new Response(JSON.stringify(result), {

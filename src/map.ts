@@ -11,7 +11,6 @@ export interface BusWithHeading extends Bus {
 export interface RouteLayer {
   shapes: number[][][];
   color?: string;
-  dashed?: boolean;
 }
 
 export interface MapHandle {

@@ -344,7 +344,6 @@ function buildRouteLayers(): RouteLayer[] {
     if (state.hasBuses) {
       active.push(layer);
     } else {
-      layer.dashed = true;
       inactive.push(layer);
     }
   }

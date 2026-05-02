@@ -441,7 +441,7 @@ export function initUI(): UIHandle {
         : '';
       const offRouteRow =
         data.offRouteDistM != null
-          ? `<div class="bus-popup-offroute" title="Pode ter desviado, GPS impreciso ou estar em ponto fora do trajeto"><span class="bus-popup-offroute-badge">?</span>Fora do trajeto · ${data.offRouteDistM}m</div>`
+          ? `<div class="bus-popup-offroute" title="Pode ter desviado, GPS impreciso ou estar parado fora do trajeto (garagem, ponto final, etc)"><span class="bus-popup-offroute-badge">?</span>Fora do trajeto</div>`
           : '';
       busPopup.innerHTML = `
         <div class="bus-popup-header">

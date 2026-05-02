@@ -613,11 +613,11 @@ map.onBusClick((vehicleId) => {
   const screen = map.latLngToContainer(bus.lat, bus.lng);
   let directionLabel: string | null = null;
   if (state && state.routeShapes && state.routeShapes.length === 2) {
-    if (bus.shapeIdx === null) {
-      directionLabel = 'Calculando rota…';
-    } else {
+    if (bus.shapeIdx !== null) {
       const dest = state.directionLabels[bus.shapeIdx];
       directionLabel = dest ? `Indo para ${dest}` : `Sentido ${bus.shapeIdx + 1}`;
+    } else if (state.directionFilter !== null) {
+      directionLabel = 'Calculando rota…';
     }
   }
   ui.showBusPopup({

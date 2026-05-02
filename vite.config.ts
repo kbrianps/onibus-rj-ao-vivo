@@ -76,7 +76,7 @@ export default defineConfig({
     inlineCssPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'inline',
+      injectRegister: false,
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: 'Ônibus RJ - Ao Vivo',

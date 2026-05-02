@@ -57,6 +57,16 @@ const LINE_PALETTE = [
 const map = initMap('map');
 const ui = initUI();
 
+if ('serviceWorker' in navigator) {
+  void import('virtual:pwa-register').then(({ registerSW }) => {
+    const updateSW = registerSW({
+      onNeedRefresh() {
+        ui.showUpdateToast(() => updateSW(true));
+      },
+    });
+  });
+}
+
 let manualSubmitPending = false;
 
 interface BusHistory {
@@ -164,6 +174,7 @@ function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: n
 
 interface ProcessedBus extends BusWithHeading {
   shapeIdx: number | null;
+  offRouteDistM: number | null;
 }
 
 function processBuses(rawBuses: Bus[]): ProcessedBus[] {
@@ -293,7 +304,18 @@ function processBuses(rawBuses: Bus[]): ProcessedBus[] {
       lineState.routeShapes !== null &&
       lineState.routeShapes.length === 2 &&
       shapeIdx === null;
-    out.push({ ...b, heading, stale, color: lineState.color, shapeIdx, pending });
+    const offRoute = branch === 'no-snap' && closestInfo !== null;
+    const offRouteDistM = offRoute && closestInfo ? closestInfo.dist : null;
+    out.push({
+      ...b,
+      heading,
+      stale,
+      color: lineState.color,
+      shapeIdx,
+      pending,
+      offRoute,
+      offRouteDistM,
+    });
   }
   return out;
 }
@@ -607,6 +629,7 @@ map.onBusClick((vehicleId) => {
     x: screen.x,
     y: screen.y,
     directionLabel,
+    offRouteDistM: bus.offRouteDistM,
   });
 });
 

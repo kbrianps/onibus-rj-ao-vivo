@@ -24,6 +24,8 @@ export interface BusPopupData {
   y: number;
   /** Display: "Indo para Guadalupe" or "Calculando rota…" or null. */
   directionLabel: string | null;
+  /** Distance in meters from closest route shape; null if on-route. */
+  offRouteDistM?: number | null;
 }
 
 export interface UIHandle {
@@ -49,6 +51,7 @@ export interface UIHandle {
   showBusPopup: (data: BusPopupData) => void;
   hideBusPopup: () => void;
   toast: (msg: string, ms?: number) => void;
+  showUpdateToast: (onUpdate: () => void) => void;
 }
 
 const SUBMIT_ICONS: Record<SubmitState, string> = {
@@ -436,12 +439,17 @@ export function initUI(): UIHandle {
       const directionRow = data.directionLabel
         ? `<div class="bus-popup-direction"${data.directionLabel.startsWith('Calculando') ? ' data-pending="true"' : ''}>${data.directionLabel}</div>`
         : '';
+      const offRouteRow =
+        data.offRouteDistM != null
+          ? `<div class="bus-popup-offroute" title="Pode ter desviado, GPS impreciso ou estar em ponto fora do trajeto"><span class="bus-popup-offroute-badge">?</span>Fora do trajeto · ${data.offRouteDistM}m</div>`
+          : '';
       busPopup.innerHTML = `
         <div class="bus-popup-header">
           <span class="bus-popup-line">${data.line}</span>
           <span class="bus-popup-ord">${data.vehicleId}</span>
         </div>
         ${directionRow}
+        ${offRouteRow}
         <div class="bus-popup-meta">${data.speed > 0 ? `${Math.round(data.speed)} km/h · ` : ''}há ${ageLabel}</div>
       `;
       busPopup.hidden = false;
@@ -465,6 +473,22 @@ export function initUI(): UIHandle {
         toastEl.hidden = true;
         toastTimer = null;
       }, ms);
+    },
+    showUpdateToast(onUpdate) {
+      let el = document.getElementById('update-toast') as HTMLDivElement | null;
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'update-toast';
+        document.body.appendChild(el);
+      }
+      el.innerHTML = `
+        <span>Nova versão disponível</span>
+        <button type="button" class="update-toast-btn">Atualizar</button>
+      `;
+      el.hidden = false;
+      el.querySelector('.update-toast-btn')?.addEventListener('click', () => {
+        onUpdate();
+      });
     },
   };
 }
